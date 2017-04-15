@@ -6,3 +6,6 @@ Linux平台上开始DPDK
     :numbered:
 
     intro
+    sys_reqs
+    enable_func
+	

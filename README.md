@@ -1,5 +1,5 @@
 # DPDK英文文档翻译及学习笔记
 
-英文源文档也一并上传，有翻译问题请和我联系，谢谢。
+文档托管在[dpdk-docs.readthedocs.io](http://dpdk-docs.readthedocs.io/)上，欢迎下载。
 
-文档托管在Readthedocs上
+英文原文档readthedocs上，或者DPDK官网上都可以找到。

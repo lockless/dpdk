@@ -28,36 +28,32 @@
     (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
     OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-Compiling and Running Sample Applications
-=========================================
+编译和运行简单应用程序
+======================
 
-The chapter describes how to compile and run applications in an DPDK environment.
-It also provides a pointer to where sample applications are stored.
+本章介绍如何在DPDK环境下编译和运行应用程序。还指出应用程序的存储位置。
 
 .. note::
 
-    Parts of this process can also be done using the setup script described the
-    :ref:`linux_setup_script` section of this document.
+    此过程的部分操作也可以使用脚本来完成。参考 :ref:`linux_setup_script` 章节描述。
 
-Compiling a Sample Application
-------------------------------
+编译一个简单应用程序
+--------------------
 
-Once an DPDK target environment directory has been created (such as ``x86_64-native-linuxapp-gcc``),
-it contains all libraries and header files required to build an application.
+一个DPDK目标环境创建完成时(如 ``x86_64-native-linuxapp-gcc``)，它包含编译一个应用程序所需要的全部库和头文件。
 
-When compiling an application in the Linux* environment on the DPDK, the following variables must be exported:
+当在Linux* 交叉环境中编译应用程序时，以下变量需要预先导出：
 
-* ``RTE_SDK`` - Points to the DPDK installation directory.
+* ``RTE_SDK`` - 指向DPDK安装目录。
 
-* ``RTE_TARGET`` - Points to the DPDK target environment directory.
+* ``RTE_TARGET`` - 指向DPDK目标环境目录。
 
-The following is an example of creating the ``helloworld`` application, which runs in the DPDK Linux environment.
-This example may be found in the ``${RTE_SDK}/examples`` directory.
+以下是创建 ``helloworld`` 应用程序实例，该实例将在DPDK Linux环境中运行。
+这个实例可以在目录 ``${RTE_SDK}/examples`` 找到。
 
-The directory contains the ``main.c`` file. This file, when combined with the libraries in the DPDK target environment,
-calls the various functions to initialize the DPDK environment,
-then launches an entry point (dispatch application) for each core to be utilized.
-By default, the binary is generated in the build directory.
+该目录包含 ``main.c`` 文件。该文件与DPDK目标环境中的库结合使用时，调用各种函数初始化DPDK环境，
+然后，为每个要使用的core启动一个入口点（调度应用程序）。
+默认情况下，二进制文件存储在build目录中。
 
 .. code-block:: console
 
@@ -76,9 +72,9 @@ By default, the binary is generated in the build directory.
 
 .. note::
 
-    In the above example, ``helloworld`` was in the directory structure of the DPDK.
-    However, it could have been located outside the directory structure to keep the DPDK structure intact.
-    In the following case, the ``helloworld`` application is copied to a new directory as a new starting point.
+    在上面的例子中， ``helloworld`` 是在DPDK的目录结构下的。
+    当然，也可以将其放在DPDK目录之外，以保证DPDK的结构不变。
+    下面的例子， ``helloworld`` 应用程序被复制到一个新的目录下。
 
     .. code-block:: console
 
@@ -93,22 +89,20 @@ By default, the binary is generated in the build directory.
          INSTALL-APP helloworld
          INSTALL-MAP helloworld.map
 
-Running a Sample Application
-----------------------------
+运行一个简单的应用程序
+----------------------
 
 .. warning::
 
-    The UIO drivers and hugepages must be setup prior to running an application.
+    UIO驱动和hugepage必须在程序运行前设置好。
 
 .. warning::
 
-    Any ports to be used by the application must be already bound to an appropriate kernel
-    module, as described in :ref:`linux_gsg_binding_kernel`, prior to running the application.
+    应用程序使用的任何端口，必须绑定到合适的内核驱动模块上，如章节 :ref:`linux_gsg_binding_kernel` 描述的那样。
 
-The application is linked with the DPDK target environment's Environmental Abstraction Layer (EAL) library,
-which provides some options that are generic to every DPDK application.
+应用程序与DPDK目标环境的环境抽象层（EAL）库相关联，该库提供了所有DPDK程序通用的一些选项。
 
-The following is the list of options that can be given to the EAL:
+以下是EAL提供的一些选项列表：
 
 .. code-block:: console
 
@@ -116,141 +110,113 @@ The following is the list of options that can be given to the EAL:
               [--socket-mem=MB,...] [-m MB] [-r NUM] [-v] [--file-prefix] \
 	      [--proc-type <primary|secondary|auto>] [-- xen-dom0]
 
-The EAL options are as follows:
+选项描述如下：
 
 * ``-c COREMASK``:
-  An hexadecimal bit mask of the cores to run on. Note that core numbering can
-  change between platforms and should be determined beforehand.
+  要运行的内核的十六进制掩码。注意，平台之间编号可能不同，需要事先确定。
 
 * ``-n NUM``:
-  Number of memory channels per processor socket.
+  每个处理器插槽的内存通道数目。
 
 * ``-b <domain:bus:devid.func>``:
-  Blacklisting of ports; prevent EAL from using specified PCI device
-  (multiple ``-b`` options are allowed).
+  端口黑名单，避免EAL使用指定的PCI设备。
 
 * ``--use-device``:
-  use the specified Ethernet device(s) only. Use comma-separate
-  ``[domain:]bus:devid.func`` values. Cannot be used with ``-b`` option.
+  仅使用指定的以太网设备。使用逗号分隔 ``[domain:]bus:devid.func`` 值，不能与 ``-b`` 选项一起使用。
 
 * ``--socket-mem``:
-  Memory to allocate from hugepages on specific sockets.
+  从特定插槽上的hugepage分配内存。
 
 * ``-m MB``:
-  Memory to allocate from hugepages, regardless of processor socket. It is
-  recommended that ``--socket-mem`` be used instead of this option.
+  内存从hugepage分配，不管处理器插槽。建议使用 ``--socket-mem`` 而非这个选项。
 
 * ``-r NUM``:
-  Number of memory ranks.
+  内存数量。
 
 * ``-v``:
-  Display version information on startup.
+  显示启动时的版本信息。
 
 * ``--huge-dir``:
-  The directory where hugetlbfs is mounted.
+  挂载hugetlbfs的目录。
 
 * ``--file-prefix``:
-  The prefix text used for hugepage filenames.
+  用于hugepage文件名的前缀文本。
 
 * ``--proc-type``:
-  The type of process instance.
+  程序实例的类型。
 
 * ``--xen-dom0``:
-  Support application running on Xen Domain0 without hugetlbfs.
+  支持在Xen Domain0上运行，但不具有hugetlbfs的程序。
 
 * ``--vmware-tsc-map``:
-  Use VMware TSC map instead of native RDTSC.
+  使用VMware TSC 映射而不是本地RDTSC。
 
 * ``--base-virtaddr``:
-  Specify base virtual address.
+  指定基本虚拟地址。
 
 * ``--vfio-intr``:
-  Specify interrupt type to be used by VFIO (has no effect if VFIO is not used).
+  指定要由VFIO使用的中断类型。(如果不支持VFIO，则配置无效)。
 
-The ``-c`` and option is mandatory; the others are optional.
+其中 ``-c`` 是强制性的，其他为可选配置。
 
-Copy the DPDK application binary to your target, then run the application as follows
-(assuming the platform has four memory channels per processor socket,
-and that cores 0-3 are present and are to be used for running the application)::
+将DPDK应用程序二进制文件拷贝到目标设备，按照如下命令运行(我们假设每个平台处理器有4个内存通道，并且存在core0～3用于运行程序)::
 
     ./helloworld -c f -n 4
 
 .. note::
 
-    The ``--proc-type`` and ``--file-prefix`` EAL options are used for running
-    multiple DPDK processes. See the "Multi-process Sample Application"
-    chapter in the *DPDK Sample Applications User Guide* and the *DPDK
-    Programmers Guide* for more details.
+    选项 ``--proc-type`` 和 ``--file-prefix`` 用于运行多个DPDK进程。请参阅 "多应用程序实例" 章节及 *DPDK
+    编程指南* 获取更多细节。
 
-Logical Core Use by Applications
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+应用程序使用的逻辑Core
+~~~~~~~~~~~~~~~~~~~~~~
 
-The coremask parameter is always mandatory for DPDK applications.
-Each bit of the mask corresponds to the equivalent logical core number as reported by Linux.
-Since these logical core numbers, and their mapping to specific cores on specific NUMA sockets, can vary from platform to platform,
-it is recommended that the core layout for each platform be considered when choosing the coremask to use in each case.
+对于DPDK应用程序，coremask参数始终是必须的。掩码的每个位对应于Linux提供的逻辑core ID。
+由于这些逻辑core的编号，以及他们在NUMA插槽上的映射可能因平台而异，因此建议在选择每种情况下使用的coremaks时，都要考虑每个平台的core布局。
 
-On initialization of the EAL layer by an DPDK application, the logical cores to be used and their socket location are displayed.
-This information can also be determined for all cores on the system by examining the ``/proc/cpuinfo`` file, for example, by running cat ``/proc/cpuinfo``.
-The physical id attribute listed for each processor indicates the CPU socket to which it belongs.
-This can be useful when using other processors to understand the mapping of the logical cores to the sockets.
+在DPDK程序初始化EAL层时，将显示要使用的逻辑core及其插槽位置。可以通过读取 ``/proc/cpuinfo`` 文件来获取系统上所有core的信息。例如执行 cat ``/proc/cpuinfo``。
+列出来的physical id 属性表示其所属的CPU插槽。当使用了其他处理器来了解逻辑core到插槽的映射时，这些信息很有用。
 
 .. note::
 
-    A more graphical view of the logical core layout may be obtained using the ``lstopo`` Linux utility.
-    On Fedora Linux, this may be installed and run using the following command::
+    可以使用另一个Linux工具 ``lstopo`` 来获取逻辑core布局的图形化信息。在Fedora Linux上, 可以通过如下命令安装并运行工具::
 
         sudo yum install hwloc
         ./lstopo
 
 .. warning::
 
-    The logical core layout can change between different board layouts and should be checked before selecting an application coremask.
+    逻辑core在不同的电路板上可能不同，在应用程序使用coremaks时需要先确定。
 
-Hugepage Memory Use by Applications
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+应用程序使用的Hugepage内存
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-When running an application, it is recommended to use the same amount of memory as that allocated for hugepages.
-This is done automatically by the DPDK application at startup,
-if no ``-m`` or ``--socket-mem`` parameter is passed to it when run.
+当运行应用程序时，建议使用的内存与hugepage预留的内存一致。如果运行时没有 ``-m`` 或 ``--socket-mem`` 参数传入，这由DPDK应用程序在启动时自动完成。
 
-If more memory is requested by explicitly passing a ``-m`` or ``--socket-mem`` value, the application fails.
-However, the application itself can also fail if the user requests less memory than the reserved amount of hugepage-memory, particularly if using the ``-m`` option.
-The reason is as follows.
-Suppose the system has 1024 reserved 2 MB pages in socket 0 and 1024 in socket 1.
-If the user requests 128 MB of memory, the 64 pages may not match the constraints:
+如果通过显示传入 ``-m`` 或 ``--socket-mem`` 值，但是请求的内存超过了该值，应用程序将执行失败。
+但是，如果用户请求的内存小于预留的hugepage-memory，应用程序也会失败，特别是当使用了 ``-m`` 选项的时候。
+因为，假设系统在插槽0和插槽1上有1024个预留的2MB页面，如果用户请求128 MB的内存，可能存在64个页不符合要求的情况:
 
-*   The hugepage memory by be given to the application by the kernel in socket 1 only.
-    In this case, if the application attempts to create an object, such as a ring or memory pool in socket 0, it fails.
-    To avoid this issue, it is recommended that the ``--socket-mem`` option be used instead of the ``-m`` option.
+*   内核只能在插槽1中将hugepage-memory提供给应用程序。在这种情况下，如果应用程序尝试创建一个插槽0中的对象，例如ring或者内存池，那么将执行失败
+    为了避免这个问题，建议使用 ``--socket-mem`` 选项替代 ``-m`` 选项。
 
-*   These pages can be located anywhere in physical memory, and, although the DPDK EAL will attempt to allocate memory in contiguous blocks,
-    it is possible that the pages will not be contiguous. In this case, the application is not able to allocate big memory pools.
+*   这些页面可能位于物理内存中的任意位置，尽管DPDK EAL将尝试在连续的内存块中分配内存，但是页面可能是不连续的。在这种情况下，应用程序无法分配大内存。
 
-The socket-mem option can be used to request specific amounts of memory for specific sockets.
-This is accomplished by supplying the ``--socket-mem`` flag followed by amounts of memory requested on each socket,
-for example, supply ``--socket-mem=0,512`` to try and reserve 512 MB for socket 1 only.
-Similarly, on a four socket system, to allocate 1 GB memory on each of sockets 0 and 2 only, the parameter ``--socket-mem=1024,0,1024`` can be used.
-No memory will be reserved on any CPU socket that is not explicitly referenced, for example, socket 3 in this case.
-If the DPDK cannot allocate enough memory on each socket, the EAL initialization fails.
+使用socket-mem选项可以为特定的插槽请求特定大小的内存。通过提供 ``--socket-mem`` 标志和每个插槽需要的内存数量来实现的，如 ``--socket-mem=0,512`` 用于在插槽1上预留512MB内存。
+类似的，在4插槽系统上，如果只能在插槽0和2上分配1GB内存，则可以使用参数``--socket-mem=1024,0,1024`` 来实现。
+如果DPDK无法在每个插槽上分配足够的内存，则EAL初始化失败。
 
-Additional Sample Applications
-------------------------------
+其他示例程序
+------------
 
-Additional sample applications are included in the ${RTE_SDK}/examples directory.
-These sample applications may be built and run in a manner similar to that described in earlier sections in this manual.
-In addition, see the *DPDK Sample Applications User Guide* for a description of the application,
-specific instructions on compilation and execution and some explanation of the code.
+其他的一些示例程序包含在${RTE_SDK}/examples 目录下。这些示例程序可以使用本手册前面部分所述的方法进行构建运行。另外，请参阅 *DPDK示例程序用户指南* 了解应用程序的描述、编译和执行的具体说明以及代码解释。
 
-Additional Test Applications
-----------------------------
+附加的测试程序
+--------------
 
-In addition, there are two other applications that are built when the libraries are created.
-The source files for these are in the DPDK/app directory and are called test and testpmd.
-Once the libraries are created, they can be found in the build/app directory.
+此外，还有两个在创建库时构建的应用程序。这些源文件位于 DPDK/app目录下，称为test和testpmd程序。创建库之后，可以在build目录中找到。
 
-*   The test application provides a variety of specific tests for the various functions in the DPDK.
+*   test程序为DPDK中的各种功能提供具体的测试。
 
-*   The testpmd application provides a number of different packet throughput tests and
-    examples of features such as how to use the Flow Director found in the Intel® 82599 10 Gigabit Ethernet Controller.
+*   testpmd程序提供了许多不同的数据包吞吐测试，例如，在Intel® 82599 10 Gigabit Ethernet Controller中如何使用Flow Director。
 

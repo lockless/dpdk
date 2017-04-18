@@ -30,97 +30,85 @@
 
 .. _Enabling_Additional_Functionality:
 
-Enabling Additional Functionality
-=================================
+启用附加功能
+============
 
 .. _High_Precision_Event_Timer:
 
-High Precision Event Timer HPET) Functionality
-----------------------------------------------
+高精度事件定时器 (HPET) 功能
+----------------------------
 
-BIOS Support
-~~~~~~~~~~~~
+BIOS 支持
+~~~~~~~~~
 
-The High Precision Timer (HPET) must be enabled in the platform BIOS if the HPET is to be used.
-Otherwise, the Time Stamp Counter (TSC) is used by default.
-The BIOS is typically accessed by pressing F2 while the platform is starting up.
-The user can then navigate to the HPET option. On the Crystal Forest platform BIOS, the path is:
-**Advanced -> PCH-IO Configuration -> High Precision Timer ->** (Change from Disabled to Enabled if necessary).
+要使用HPET功能时，必须先在平台BIOS上开启高精度定时器。否则，默认情况下使用时间戳计数器 (TSC) 。
+通常情况下，起机时按 F2 可以访问BIOS。然后用户可以导航到HPET选项。
+在Crystal Forest平台BIOS上，路径为：**Advanced -> PCH-IO Configuration -> High Precision Timer ->** (如果需要，将Disabled 改为 Enabled )。
 
-On a system that has already booted, the following command can be issued to check if HPET is enabled::
+在已经起机的系统上，可以使用以下命令来检查HPET是否启用 ::
 
    grep hpet /proc/timer_list
 
-If no entries are returned, HPET must be enabled in the BIOS (as per the instructions above) and the system rebooted.
+如果没有条目，则必须在BIOS中启用HPET，镔铁重新启动系统。
 
-Linux Kernel Support
-~~~~~~~~~~~~~~~~~~~~
+Linux 内核支持
+~~~~~~~~~~~~~~
 
-The DPDK makes use of the platform HPET timer by mapping the timer counter into the process address space, and as such,
-requires that the ``HPET_MMAP`` kernel configuration option be enabled.
+DPDK通过将定时器计数器映射到进程地址空间来使用平台的HPET功能，因此，要求开启 ``HPET_MMAP`` 系统内核配置选项。
 
 .. warning::
 
-    On Fedora, and other common distributions such as Ubuntu, the ``HPET_MMAP`` kernel option is not enabled by default.
-    To recompile the Linux kernel with this option enabled, please consult the distributions documentation for the relevant instructions.
+    在Fedora或者其他常见的Linux发行版本（如Ubuntu）中，默认不会启用 ``HPET_MMAP`` 选项。
+    要重新编译启动此选项的内核，请参阅发行版本的相关说明。
 
-Enabling HPET in the DPDK
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+DPDK 中使能 HPET
+~~~~~~~~~~~~~~~~
 
-By default, HPET support is disabled in the DPDK build configuration files.
-To use HPET, the ``CONFIG_RTE_LIBEAL_USE_HPET`` setting should be changed to ``y``, which will enable the HPET settings at compile time.
+默认情况下，DPDK配置文件中是禁用HPET功能的。要使用HPET，需要将 ``CONFIG_RTE_LIBEAL_USE_HPET`` 设置为 ``y`` 来开启编译。
 
-For an application to use the ``rte_get_hpet_cycles()`` and ``rte_get_hpet_hz()`` API calls,
-and optionally to make the HPET the default time source for the rte_timer library,
-the new ``rte_eal_hpet_init()`` API call should be called at application initialization.
-This API call will ensure that the HPET is accessible, returning an error to the application if it is not,
-for example, if ``HPET_MMAP`` is not enabled in the kernel.
-The application can then determine what action to take, if any, if the HPET is not available at run-time.
+对于那些使用 ``rte_get_hpet_cycles()`` 及 ``rte_get_hpet_hz()`` API接口的应用程序，
+并且选择了HPET作为rte_timer库的默认时钟源，需要在初始化时调用 ``rte_eal_hpet_init()`` API。
+这个API调用将保证HPET可用，如果HPET不可用(例如，内核没有开启 ``HPET_MMAP`` 使能)，则向程序返回一个错误值。
+如果HPET在运行时不可用，应用程序可以方便的采取其他措施。
 
 .. note::
 
-    For applications that require timing APIs, but not the HPET timer specifically,
-    it is recommended that the ``rte_get_timer_cycles()`` and ``rte_get_timer_hz()`` API calls be used instead of the HPET-specific APIs.
-    These generic APIs can work with either TSC or HPET time sources, depending on what is requested by an application call to ``rte_eal_hpet_init()``,
-    if any, and on what is available on the system at runtime.
+    对于那些仅需要普通定时器API，而不是HPET定时器的应用程序，建议使用 ``rte_get_timer_cycles()`` 和 ``rte_get_timer_hz()`` API调用，而不是HPET API。
+    这些通用的API兼容TSC和HPET时钟源，具体时钟源则取决于应用程序是否调用 ``rte_eal_hpet_init()``初始化，以及运行时系统上可用的时钟。
 
-Running DPDK Applications Without Root Privileges
---------------------------------------------------------
+没有Root权限情况下运行DPDK应用程序
+----------------------------------
 
-Although applications using the DPDK use network ports and other hardware resources directly,
-with a number of small permission adjustments it is possible to run these applications as a user other than "root".
-To do so, the ownership, or permissions, on the following Linux file system objects should be adjusted to ensure that
-the Linux user account being used to run the DPDK application has access to them:
+虽然DPDK应用程序直接使用了网络端口及其他硬件资源，但通过许多小的权限调整，可以允许除root权限之外的用户运行这些应用程序。
+为了保证普通的Linux用户也可以运行这些程序，需要调整如下Linux文件系统权限:
 
-*   All directories which serve as hugepage mount points, for example,   ``/mnt/huge``
+*   所有用于hugepage挂载点的文件和目录，如 ``/mnt/huge``
 
-*   The userspace-io device files in  ``/dev``, for example,  ``/dev/uio0``, ``/dev/uio1``, and so on
+*   ``/dev`` 中的UIO设备文件，如 ``/dev/uio0``, ``/dev/uio1`` 等
 
-*   The userspace-io sysfs config and resource files, for example for ``uio0``::
+*   UIO系统配置和源文件，如 ``uio0``::
 
        /sys/class/uio/uio0/device/config
        /sys/class/uio/uio0/device/resource*
 
-*   If the HPET is to be used,  ``/dev/hpet``
+*   如果要使用HPET，那么 ``/dev/hpet`` 目录也要修改
 
 .. note::
 
-    On some Linux installations, ``/dev/hugepages``  is also a hugepage mount point created by default.
+    在某些Linux 安装中， ``/dev/hugepages`` 也是默认创建hugepage挂载点的文件。
 
-Power Management and Power Saving Functionality
------------------------------------------------
+电源管理和节能功能
+------------------
 
-Enhanced Intel SpeedStep® Technology must be enabled in the platform BIOS if the power management feature of DPDK is to be used.
-Otherwise, the sys file folder ``/sys/devices/system/cpu/cpu0/cpufreq`` will not exist, and the CPU frequency- based power management cannot be used.
-Consult the relevant BIOS documentation to determine how these settings can be accessed.
+如果要使用DPDK的电源管理功能，必须在平台BIOS中启用增强的Intel SpeedStep® Technology。否则，sys文件夹下 ``/sys/devices/system/cpu/cpu0/cpufreq`` 将不存在，不能使用基于CPU频率的电源管理。请参阅相关的BIOS文档以确定如何访问这些设置。
 
-For example, on some Intel reference platform BIOS variants, the path to Enhanced Intel SpeedStep® Technology is::
+例如，在某些Intel参考平台上，开启Enhanced Intel SpeedStep® Technology 的路径为::
 
    Advanced
      -> Processor Configuration
      -> Enhanced Intel SpeedStep® Tech
 
-In addition, C3 and C6 should be enabled as well for power management. The path of C3 and C6 on the same platform BIOS is::
+此外，C3 和 C6 也应该使能以支持电源管理。C3 和 C6 的配置路径为::
 
    Advanced
      -> Processor Configuration
@@ -128,28 +116,23 @@ In addition, C3 and C6 should be enabled as well for power management. The path 
      -> Processor Configuration
      -> Processor C6
 
-Using Linux Core Isolation to Reduce Context Switches
------------------------------------------------------
+使用 Linux Core 隔离来减少上下文切换
+------------------------------------
 
-While the threads used by an DPDK application are pinned to logical cores on the system,
-it is possible for the Linux scheduler to run other tasks on those cores also.
-To help prevent additional workloads from running on those cores,
-it is possible to use the ``isolcpus`` Linux kernel parameter to isolate them from the general Linux scheduler.
+虽然DPDK应用程序使用的线程固定在系统的逻辑核上，但Linux调度程序也可以在这些核上运行其他任务。
+为了防止在这些核上运行额外的工作负载，可以使用 ``isolcpus`` Linux 内核参数来将其与通用的Linux调度程序隔离开来。
 
-For example, if DPDK applications are to run on logical cores 2, 4 and 6,
-the following should be added to the kernel parameter list:
+例如，如果DPDK应用程序要在逻辑核2，4，6上运行，应将以下内容添加到内核参数表中:
 
 .. code-block:: console
 
     isolcpus=2,4,6
 
-Loading the DPDK KNI Kernel Module
-----------------------------------
+加载 DPDK KNI 内核模块
+----------------------
 
-To run the DPDK Kernel NIC Interface (KNI) sample application, an extra kernel module (the kni module) must be loaded into the running kernel.
-The module is found in the kmod sub-directory of the DPDK target directory.
-Similar to the loading of the ``igb_uio`` module, this module should be loaded using the insmod command as shown below
-(assuming that the current directory is the DPDK target directory):
+要运行DPDK Kernel NIC Interface (KNI) 应用程序，需要将一个额外的内核模块(kni模块)加载到内核中。
+该模块位于DPDK目录kmod子目录中。与 ``igb_uio`` 模块加载类似，(假设当前目录就是DPDK目录):
 
 .. code-block:: console
 
@@ -157,12 +140,12 @@ Similar to the loading of the ``igb_uio`` module, this module should be loaded u
 
 .. note::
 
-   See the "Kernel NIC Interface Sample Application" chapter in the *DPDK Sample Applications User Guide* for more details.
+   相关的详细信息，可以参阅 "Kernel NIC Interface Sample Application" 章节和 *DPDK 示例程序用户指南* 。
 
-Using Linux IOMMU Pass-Through to Run DPDK with Intel® VT-d
------------------------------------------------------------
+Linux IOMMU Pass-Through使用Intel® VT-d运行DPDK 
+-----------------------------------------------
 
-To enable Intel® VT-d in a Linux kernel, a number of kernel configuration options must be set. These include:
+要在Linux内核中启用Intel® VT-d，必须配置一系列内核选项，包括：
 
 *   ``IOMMU_SUPPORT``
 
@@ -170,35 +153,27 @@ To enable Intel® VT-d in a Linux kernel, a number of kernel configuration optio
 
 *   ``INTEL_IOMMU``
 
-In addition, to run the DPDK with Intel® VT-d, the ``iommu=pt`` kernel parameter must be used when using ``igb_uio`` driver.
-This results in pass-through of the DMAR (DMA Remapping) lookup in the host.
-Also, if ``INTEL_IOMMU_DEFAULT_ON`` is not set in the kernel, the ``intel_iommu=on`` kernel parameter must be used too.
-This ensures that the Intel IOMMU is being initialized as expected.
+另外，要使用Intel® VT-d运行DPDK，使用 ``igb_uio`` 驱动时必须携带 ``iommu=pt`` 参数。
+这使得主机可以直接通过DMA重映射查找。
+另外，如果内核中没有设置 ``INTEL_IOMMU_DEFAULT_ON`` 参数，那么也必须使用 ``intel_iommu=on`` 参数。这可以确保 Intel IOMMU 被正确初始化。
 
-Please note that while using ``iommu=pt`` is compulsory for ``igb_uio driver``, the ``vfio-pci`` driver can actually work with both ``iommu=pt`` and ``iommu=on``.
+请注意，对于``igb_uio`` 驱动程序，使用 ``iommu = pt`` 是必须de ，``vfio-pci`` 驱动程序实际上可以同时使用 ``iommu = pt`` 和 ``iommu = on`` 。
 
-High Performance of Small Packets on 40G NIC
---------------------------------------------
+40G NIC上的小包处理高性能
+-------------------------
 
-As there might be firmware fixes for performance enhancement in latest version
-of firmware image, the firmware update might be needed for getting high performance.
-Check with the local Intel's Network Division application engineers for firmware updates.
-Users should consult the release notes specific to a DPDK release to identify
-the validated firmware version for a NIC using the i40e driver.
+由于在最新版本中可能提供用于性能提升的固件修复，因此最好进行固件更新以获取更高的性能。
+请和 Intel's Network Division 工程师联系以进行固件更新。
+用户可以参考DPDK版本发行说明，以使用 i40e 驱动程序识别NIC的已验证固件版本。
 
-Use 16 Bytes RX Descriptor Size
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+使用16B大小的RX描述符
+~~~~~~~~~~~~~~~~~~~~~
 
-As i40e PMD supports both 16 and 32 bytes RX descriptor sizes, and 16 bytes size can provide helps to high performance of small packets.
-Configuration of ``CONFIG_RTE_LIBRTE_I40E_16BYTE_RX_DESC`` in config files can be changed to use 16 bytes size RX descriptors.
+由于 i40e PMD 支持16B和32B的RX描述符，而16B大小的描述符可以帮助小型数据包提供性能，因此，配置文件中 ``CONFIG_RTE_LIBRTE_I40E_16BYTE_RX_DESC`` 更改为使用16B大小的描述符。
 
-High Performance and per Packet Latency Tradeoff
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+高性能和每数据包延迟权衡
+~~~~~~~~~~~~~~~~~~~~~~~~
 
-Due to the hardware design, the interrupt signal inside NIC is needed for per
-packet descriptor write-back. The minimum interval of interrupts could be set
-at compile time by ``CONFIG_RTE_LIBRTE_I40E_ITR_INTERVAL`` in configuration files.
-Though there is a default configuration, the interval could be tuned by the
-users with that configuration item depends on what the user cares about more,
-performance or per packet latency.
+由于硬件设计，每个数据包描述符回写都需要NIC内部的中断信号。中断的最小间隔可以在编译时通过配置文件中的 ``CONFIG_RTE_LIBRTE_I40E_ITR_INTERVAL`` 指定。
+虽然有默认配置，但是该配置可以由用户自行调整，这取决于用户所关心的内容，整体性能或者每数据包延迟。
 

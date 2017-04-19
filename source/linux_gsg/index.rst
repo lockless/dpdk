@@ -30,8 +30,8 @@
 
 .. _linux_gsg:
 
-Linux平台上开始DPDK
-====================
+Linux平台上DPDK入门指南
+=======================
 
 .. toctree::
     :maxdepth: 2

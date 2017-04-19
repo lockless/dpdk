@@ -30,81 +30,72 @@
 
 .. _linux_setup_script:
 
-Quick Start Setup Script
-========================
+使用脚本快速构建
+================
 
-The dpdk-setup.sh script, found in the usertools subdirectory, allows the user to perform the following tasks:
+usertools目录中的dpdk-setup.sh脚本，向用户提供了快速执行如下任务功能:
 
-*   Build the DPDK libraries
+*   构建DPDK库
 
-*   Insert and remove the DPDK IGB_UIO kernel module
+*   加载/卸载DPDK IGB_UIO内核模块
 
-*   Insert and remove VFIO kernel modules
+*   加载/卸载VFIO内核模块
 
-*   Insert and remove the DPDK KNI kernel module
+*   加载/卸载DPDK KNI内核模块
 
-*   Create and delete hugepages for NUMA and non-NUMA cases
+*   创建/删除NUMA 或 non-NUMA平台的hugepages
 
-*   View network port status and reserve ports for DPDK application use
+*   查看网络端口状态和预留给DPDK应用程序使用的端口
 
-*   Set up permissions for using VFIO as a non-privileged user
+*   设置非root用户使用VFIO的权限
 
-*   Run the test and testpmd applications
+*   运行test和testpmd应用程序
 
-*   Look at hugepages in the meminfo
+*   查看meminfo中的hugepages
 
-*   List hugepages in ``/mnt/huge``
+*   列出在 ``/mnt/huge`` 中的hugepages 
 
-*   Remove built DPDK libraries
+*   删除内置的DPDK库
 
-Once these steps have been completed for one of the EAL targets,
-the user may compile their own application that links in the EAL libraries to create the DPDK image.
+对于其中一个EAL目标，一旦完成了这些步骤，用户就可以编译自己的在EAL库中链接的应用程序来创建DPDK映像。
 
-Script Organization
--------------------
+脚本组织
+--------
 
-The dpdk-setup.sh script is logically organized into a series of steps that a user performs in sequence.
-Each step provides a number of options that guide the user to completing the desired task.
-The following is a brief synopsis of each step.
+dpdk-setup.sh脚本在逻辑上组织成用户按顺序执行的一系列步骤。每个步骤都提供了许多选项来指导用户完成所需的任务。以下是每个步骤的简单介绍：
 
 **Step 1: Build DPDK Libraries**
 
-Initially, the user must select a DPDK target to choose the correct target type and compiler options to use when building the libraries.
+最开始，用户必须指定tagert的类型以便编译正确的库。
 
-The user must have all libraries, modules, updates and compilers installed in the system prior to this,
-as described in the earlier chapters in this Getting Started Guide.
+如本入门指南前面的章节描述，用户必须在此之前就安装好所有的库、模块、更新和编译器。
 
 **Step 2: Setup Environment**
 
-The user configures the Linux* environment to support the running of DPDK applications.
-Hugepages can be set up for NUMA or non-NUMA systems. Any existing hugepages will be removed.
-The DPDK kernel module that is needed can also be inserted in this step,
-and network ports may be bound to this module for DPDK application use.
+用户需要配置Linux* 环境以支持DPDK应用程序的运行。
+可以为NUMA 或non-NUMA系统分配Hugepages。任何原来已经存在的hugepages将被删除。
+也可以在此步骤中插入所需的DPDK内核模块，并且可以将网络端口绑定到此模块供DPDK使用。
 
 **Step 3: Run an Application**
 
-The user may run the test application once the other steps have been performed.
-The test application allows the user to run a series of functional tests for the DPDK.
-The testpmd application, which supports the receiving and sending of packets, can also be run.
+一旦执行了其他步骤，用户就可以运行test程序。该程序允许用户为DPDK运行一系列功能测试。也可以运行支持数据包接收和发送的testpmd程序。
 
 **Step 4: Examining the System**
 
-This step provides some tools for examining the status of hugepage mappings.
+此步骤提供了一些用于检查Hugepage映射状态的工具。
 
 **Step 5: System Cleanup**
 
-The final step has options for restoring the system to its original state.
+最后一步具有将系统恢复到原始状态的选项。
 
 Use Cases
 ---------
 
-The following are some example of how to use the dpdk-setup.sh script.
-The script should be run using the source command.
-Some options in the script prompt the user for further data before proceeding.
+以下是使用dpdk-setup.sh的示例。脚本应该使用source命令运行。脚本中的某些选项在继续操作之前提示用户需要进一步的数据输入。
 
 .. warning::
 
-    The dpdk-setup.sh script should be run with root privileges.
+    必须与root全选运行dpdk-setup.sh。
 
 .. code-block:: console
 
@@ -200,7 +191,7 @@ Some options in the script prompt the user for further data before proceeding.
 
 Option:
 
-The following selection demonstrates the creation of the ``x86_64-native-linuxapp-gcc`` DPDK library.
+以下选项演示了 “x86_64-native-linuxapp-gcc“ DPDK库的创建。
 
 .. code-block:: console
 
@@ -214,7 +205,7 @@ The following selection demonstrates the creation of the ``x86_64-native-linuxap
     Build complete
     RTE_TARGET exported as x86_64-native-linuxapp-gcc
 
-The following selection demonstrates the starting of the DPDK UIO driver.
+以下选项用于启动DPDK UIO驱动程序。
 
 .. code-block:: console
 
@@ -223,14 +214,12 @@ The following selection demonstrates the starting of the DPDK UIO driver.
     Unloading any existing DPDK UIO module
     Loading DPDK UIO module
 
-The following selection demonstrates the creation of hugepages in a NUMA system.
-1024 2 MByte pages are assigned to each node.
-The result is that the application should use -m 4096 for starting the application to access both memory areas
-(this is done automatically if the -m option is not provided).
+以下选项演示了在NUMA系统中创建hugepage。为每个node分配1024个2MB的页。
+应用程序应该使用 -m 4096 来启动，以便访问这两个内存区域。(如果没有 -m 选项，则自动完成)。
 
 .. note::
 
-    If prompts are displayed to remove temporary files, type 'y'.
+    如果显示提示以删除临时文件，请输入'y'。
 
 .. code-block:: console
 
@@ -246,7 +235,7 @@ The result is that the application should use -m 4096 for starting the applicati
     Reserving hugepages
     Creating /mnt/huge and mounting as hugetlbfs
 
-The following selection demonstrates the launch of the test application to run on a single core.
+以下操作说明了启动测试应用程序以在单个core上运行
 
 .. code-block:: console
 
@@ -262,16 +251,14 @@ The following selection demonstrates the launch of the test application to run o
     EAL: Master core 0 is ready (tid=1b2ad720)
     RTE>>
 
-Applications
-------------
+应用程序
+--------
 
-Once the user has run the dpdk-setup.sh script, built one of the EAL targets and set up hugepages (if using one of the Linux EAL targets),
-the user can then move on to building and running their application or one of the examples provided.
+一旦用户运行和dpdk-setup.sh脚本，构建了目标程序并且设置了hugepages，用户就可以继续构建和运行自己的应用程序或者源码中提供的示例。
 
-The examples in the /examples directory provide a good starting point to gain an understanding of the operation of the DPDK.
-The following command sequence shows how the helloworld sample application is built and run.
-As recommended in Section 4.2.1 , "Logical Core Use by Applications",
-the logical core layout of the platform should be determined when selecting a core mask to use for an application.
+/examples 目录中提供的示例程序为了解DPDK提供了很好的起点。
+以下命令显示了helloworld应用程序的构建和运行方式。
+按照4.2.1节，"应用程序使用的逻辑Core"描述，当选择用于应用程序的coremask时，需要确定平台的逻辑core的布局。
 
 .. code-block:: console
 

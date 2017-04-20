@@ -28,99 +28,84 @@
     (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
     OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-**Part 1: Architecture Overview**
+**第一部分：架构概述**
 
-Overview
-========
+概述
+====
 
-This section gives a global overview of the architecture of Data Plane Development Kit (DPDK).
+本章节给出了DPDK架构的一个全局的描述。
 
-The main goal of the DPDK is to provide a simple,
-complete framework for fast packet processing in data plane applications.
-Users may use the code to understand some of the techniques employed,
-to build upon for prototyping or to add their own protocol stacks.
-Alternative ecosystem options that use the DPDK are available.
+DPDK的主要目标就是要为数据面快速报文处理应用提供一个简洁但是完整的框架。
+用户可以通过代码来理解其中使用的一些技术，并用来构建自己的应用原型或是添加自己的协议栈。
+用户也可以替换DPDK提供的原生的选项。
 
-The framework creates a set of libraries for specific environments
-through the creation of an Environment Abstraction Layer (EAL),
-which may be specific to a mode of the Intel® architecture (32-bit or 64-bit),
-Linux* user space compilers or a specific platform.
-These environments are created through the use of make files and configuration files.
-Once the EAL library is created, the user may link with the library to create their own applications.
-Other libraries, outside of EAL, including the Hash,
-Longest Prefix Match (LPM) and rings libraries are also provided.
-Sample applications are provided to help show the user how to use various features of the DPDK.
+通过创建环境抽象层EAL，DPDK框架为每个特殊的环境创建了运行库。
+这个环境抽象层是对底层架构的抽象，通过make和配置文件，在Linux用户空间编译完成。
+一旦EAL库编译完成，用户可以通过链接这些库来构建自己的app。
+除开环境抽象层，还有一些其他库，包括哈希算法、最长前缀匹配、环形缓冲器。
+DPDK提供了一些app用例用来指导如何使用这些特性来创建自己的应用程序。
 
-The DPDK implements a run to completion model for packet processing,
-where all resources must be allocated prior to calling Data Plane applications,
-running as execution units on logical processing cores.
-The model does not support a scheduler and all devices are accessed by polling.
-The primary reason for not using interrupts is the performance overhead imposed by interrupt processing.
+DPDK实现了run-to-complete报文处理模型，数据面处理程序在调用之前必须预先分配好所有的资源，并作为执行单元运行与逻辑核心上。
+这种模型并不支持调度，且所有的设备通过轮询方式访问。
+不使用中断方式的主要原因就是中断处理增加了性能开销。
 
-In addition to the run-to-completion model,
-a pipeline model may also be used by passing packets or messages between cores via the rings.
-This allows work to be performed in stages and may allow more efficient use of code on cores.
+作为RTC模型的扩展，通过使用ring在不同core之间传递报文和消息，也可以实现报文处理的流水线模型（pipeline）。
+流水线模型允许操作分阶段执行，在多核代码执行中可能更高效。
 
-Development Environment
------------------------
 
-The DPDK project installation requires Linux and the associated toolchain,
-such as one or more compilers, assembler, make utility,
-editor and various libraries to create the DPDK components and libraries.
+开发环境
+--------
 
-Once these libraries are created for the specific environment and architecture,
-they may then be used to create the user's data plane application.
+DPDK项目创建要求Linux环境及相关的工具链，例如一个或多个编译工具、汇编程序、make工具、编辑器及DPDK组建和库用到的库。
 
-When creating applications for the Linux user space, the glibc library is used.
-For DPDK applications, two environmental variables (RTE_SDK and RTE_TARGET)
-must be configured before compiling the applications.
-The following are examples of how the variables can be set:
+当制定环境和架构的库编译出来，这些库就可以用于创建我们自己的数据面处理程序。
+
+创建Linux用户空间app时，需要用到glibc库。
+对于DPDP app，必须使用两个全局的环境变量（RTE_SDK & RTE_TARGET），这两个变量必须在编译app之间配置好:
 
 .. code-block:: console
 
     export RTE_SDK=/home/user/DPDK
     export RTE_TARGET=x86_64-native-linuxapp-gcc
 
-See the *DPDK Getting Started Guide* for information on setting up the development environment.
+也可以参阅 *DPDK入门指南* 来获取更多搭建开发环境的信息。
 
-Environment Abstraction Layer
------------------------------
+环境适配层EAL
+-------------
 
-The Environment Abstraction Layer (EAL) provides a generic interface
-that hides the environment specifics from the applications and libraries.
-The services provided by the EAL are:
+环境适配层(Environment Abstraction Layer)提供了通用的接口来隐藏了环境细节，使得上层app和库无需考虑这些细节。
+EAL提供的服务有：
 
-*   DPDK loading and launching
+*   DPDK的加载和启动
 
-*   Support for multi-process and multi-thread execution types
+*   支持多线程和多进程执行方式
 
-*   Core affinity/assignment procedures
+*   CPU亲和性设置
 
-*   System memory allocation/de-allocation
+*   系统内存分配和释放
 
-*   Atomic/lock operations
+*   原子操作
 
-*   Time reference
+*   定时器引用
 
-*   PCI bus access
+*   PCI总线访问
 
-*   Trace and debug functions
+*   跟踪和调试功能
 
-*   CPU feature identification
+*   CPU特性编号
 
-*   Interrupt handling
+*   中断处理
 
-*   Alarm operations
+*   警告操作
 
-*   Memory management (malloc)
+*   内存管理
 
-The EAL is fully described in :ref:`Environment Abstraction Layer <Environment_Abstraction_Layer>`.
+EAL的更完整的描述请参阅 :ref:`Environment Abstraction Layer <Environment_Abstraction_Layer>`.
 
-Core Components
----------------
+核心组件
+--------
 
-The *core components* are a set of libraries that provide all the elements needed
-for high-performance packet processing applications.
+*核心组件* 指一系列的库，用于为高性能包处理程序提供所有必须的元素。核心组件及其之间的关系如下图所示:
 
 .. _figure_architecture-overview:
 
@@ -129,69 +114,54 @@ for high-performance packet processing applications.
    Core Components Architecture
 
 
-Ring Manager (librte_ring)
+环形缓冲区管理(librte_ring)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Ring数据结构提供了一个无锁的多生产者，多消费者的FIFO表处理接口。
+他比无锁队列优异的地方在于它容易部署，适合大量的操作，而且更快。
+Ring库在 :ref:`Memory Pool Manager (librte_mempool) <Mempool_Library>` 中使用到，
+而且ring还用于不同核之间或是逻辑核上处理单元之间的通信。
+Ring缓存机制及其使用可以参考 :ref:`Ring Library <Ring_Library>`。
+
+内存池管理(librte_mempool)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The ring structure provides a lockless multi-producer, multi-consumer FIFO API in a finite size table.
-It has some advantages over lockless queues; easier to implement, adapted to bulk operations and faster.
-A ring is used by the :ref:`Memory Pool Manager (librte_mempool) <Mempool_Library>`
-and may be used as a general communication mechanism between cores
-and/or execution blocks connected together on a logical core.
+内存池管理的主要职责就是在内存中分配指定数目对象的POOL。
+每个POOL以名称来唯一标识，并且使用一个ring来存储空闲的对象节点。
+它还提供了一些其他的服务如对象节点的每核备份缓存及自动对齐以保证元素能均衡的处于每核内存通道上。
+内存池分配器具体行为参考 :ref:`Mempool Library <Mempool_Library>`。
 
-This ring buffer and its usage are fully described in :ref:`Ring Library <Ring_Library>`.
+网络报文缓冲区管理(librte_mbuf)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Memory Pool Manager (librte_mempool)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+报文缓存管理器提供了创建、释放报文缓存的能力，DPDK应用程序中可能使用这些报文缓存来存储消息。
+而消息通常在程序开始时通过DPDK的MEMPOOL库创建并存储。
+BUFF库提供了报文申请释放的API，通常消息buff用于缓存普通消息，报文buff用于缓存网络报文。
+报文缓存管理参考 :ref:`Mbuf Library <Mbuf_Library>`。
 
-The Memory Pool Manager is responsible for allocating pools of objects in memory.
-A pool is identified by name and uses a ring to store free objects.
-It provides some other optional services,
-such as a per-core object cache and an alignment helper to ensure that objects are padded to spread them equally on all RAM channels.
+定时器管理(librte_timer)
+~~~~~~~~~~~~~~~~~~~~~~~~
 
-This memory pool allocator is described in  :ref:`Mempool Library <Mempool_Library>`.
+这个库位DPDK执行单元提供了定时服务，为函数异步执行提供支持。
+定时器可以设置周期调用或只调用一次。
+使用EAL提供的接口获取高精度时钟，并且能在每个核上根据需要初始化。
+具体参考 :ref:`Timer Library <Timer_Library>`。
 
-Network Packet Buffer Management (librte_mbuf)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+以太网轮询驱动架构
+------------------
 
-The mbuf library provides the facility to create and destroy buffers
-that may be used by the DPDK application to store message buffers.
-The message buffers are created at startup time and stored in a mempool, using the DPDK mempool library.
+DPDK的PMD驱动支持1G、10G、40G。
+同时DPDK提供了虚拟的以太网控制器，被设计成非异步，基于中断的模式。
+详细内容参考 :ref:`Poll Mode Driver <Poll_Mode_Driver>`。
 
-This library provides an API to allocate/free mbufs, manipulate control message buffers (ctrlmbuf) which are generic message buffers,
-and packet buffers (pktmbuf) which are used to carry network packets.
+报文转发算法支持
+----------------
 
-Network Packet Buffer Management is described in :ref:`Mbuf Library <Mbuf_Library>`.
+DPDK提供了哈希（librte_hash）、最长前缀匹配的（librte_lpm）算法库用于支持包转发。
+详细内容查看 :ref:`Hash Library <Hash_Library>` 和  :ref:`LPM Library <LPM_Library>` 。
 
-Timer Manager (librte_timer)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+网络协议库(librte_net)
+----------------------
 
-This library provides a timer service to DPDK execution units,
-providing the ability to execute a function asynchronously.
-It can be periodic function calls, or just a one-shot call.
-It uses the timer interface provided by the Environment Abstraction Layer (EAL)
-to get a precise time reference and can be initiated on a per-core basis as required.
-
-The library documentation is available in :ref:`Timer Library <Timer_Library>`.
-
-Ethernet* Poll Mode Driver Architecture
----------------------------------------
-
-The DPDK includes Poll Mode Drivers (PMDs) for 1 GbE, 10 GbE and 40GbE, and para virtualized virtio
-Ethernet controllers which are designed to work without asynchronous, interrupt-based signaling mechanisms.
-
-See  :ref:`Poll Mode Driver <Poll_Mode_Driver>`.
-
-Packet Forwarding Algorithm Support
------------------------------------
-
-The DPDK includes Hash (librte_hash) and Longest Prefix Match (LPM,librte_lpm)
-libraries to support the corresponding packet forwarding algorithms.
-
-See :ref:`Hash Library <Hash_Library>` and  :ref:`LPM Library <LPM_Library>` for more information.
-
-librte_net
-----------
-
-The librte_net library is a collection of IP protocol definitions and convenience macros.
-It is based on code from the FreeBSD* IP stack and contains protocol numbers (for use in IP headers),
-IP-related macros, IPv4/IPv6 header structures and TCP, UDP and SCTP header structures.
+这个库提供了IP协议的一些定义，以及一些常用的宏。
+这些定义都基于FreeBSD IP协议栈的代码，并且包含相关的协议号，IP相关宏定义，IPV4和IPV6头部结构等等。

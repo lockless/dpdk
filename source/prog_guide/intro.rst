@@ -28,56 +28,44 @@
     (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
     OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-Introduction
-============
+简介
+====
 
-This document provides software architecture information,
-development environment information and optimization guidelines.
+本文档提供软件架构信息，开发环境及优化指南。
 
-For programming examples and for instructions on compiling and running each sample application,
-see the *DPDK Sample Applications User Guide* for details.
+有关编程示例及如何编译运行这些示例，请参阅 *DPDK示例用户指南* 。
 
-For general information on compiling and running applications, see the *DPDK Getting Started Guide*.
+有关编译和运行应用程序的一般信息，请参阅 *DPDK入门指南* 。
 
-Documentation Roadmap
----------------------
+文档地图
+--------
 
-The following is a list of DPDK documents in the suggested reading order:
+以下是一份建议顺序阅读的DPDK参考文档列表：
 
-*   **Release Notes** : Provides release-specific information, including supported features,
-    limitations, fixed issues, known issues and so on.
-    Also, provides the answers to frequently asked questions in FAQ format.
+*   **发布说明** : 提供特性发行版本的信息，包括支持的功能，限制，修复的问题，已知的问题等等。此外，还以FAQ方式提供了常见问题及解答。
 
-*   **Getting Started Guide** : Describes how to install and configure the DPDK software;
-    designed to get users up and running quickly with the software.
+*   **入门指南** : 介绍如何安装和配置DPDK；旨在帮助用户快速上手。
 
-*   **FreeBSD* Getting Started Guide** : A document describing the use of the DPDK with FreeBSD*
-    has been added in DPDK Release 1.6.0.
-    Refer to this guide for installation and configuration instructions to get started using the DPDK with FreeBSD*.
+*   **FreeBSD* 入门指南** : DPDK1.6.0版本之后添加了FreeBSD*平台上DPDK入门指南。有关如何在FreeBSD*上安装配置DPDK，请参阅这个文档。
 
-*   **Programmer's Guide** (this document): Describes:
+*   **编程指南** (本文档): 描述如下内容：
 
-    *   The software architecture and how to use it (through examples),
-        specifically in a Linux* application (linuxapp) environment
+    *   软件架构及如何使用（实例介绍），特别是在Linux环境中的用法
 
-    *   The content of the DPDK, the build system
-        (including the commands that can be used in the root DPDK Makefile to build the development kit and an application)
-        and guidelines for porting an application
+    *   DPDK的主要内容，系统构建（包括可以在DPDK根目录Makefile中来构建工具包和应用程序的命令）及应用移植细则。
 
-    *   Optimizations used in the software and those that should be considered for new development
+    *   软件中使用的，以及新开发中需要考虑的一些优化。
+    
+    还提供了文档使用的术语表。
 
-    A glossary of terms is also provided.
+*   **API参考** ：提供有关DPDK功能、数据结构和其他编程结构的详细信息。
 
-*   **API Reference** : Provides detailed information about DPDK functions,
-    data structures and other programming constructs.
+*   **示例程序用户指南** ：描述了一组例程。
+    每个章节描述了一个用例，展示了具体的功能，并提供了有关如何编译、运行和使用的说明。
 
-*   **Sample Applications User Guide**: Describes a set of sample applications.
-    Each chapter describes a sample application that showcases specific functionality
-    and provides instructions on how to compile, run and use the sample application.
+相关刊物
+--------
 
-Related Publications
---------------------
-
-The following documents provide information that is relevant to the development of applications using the DPDK:
+以下文档提供与使用DPDK开发应用程序相关的信息：
 
 *   Intel® 64 and IA-32 Architectures Software Developer's Manual Volume 3A: System Programming Guide

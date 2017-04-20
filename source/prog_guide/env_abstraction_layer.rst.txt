@@ -30,217 +30,239 @@
 
 .. _Environment_Abstraction_Layer:
 
-环境适配层EAL
-=============
+Environment Abstraction Layer
+=============================
 
-环境抽象层为底层资源如硬件和内存空间的访问提供了接口。
-这些通用的接口为APP和库隐藏了不同环境的特殊性。
-EAL负责初始化及分配资源（内存、PCI设备、定时器、控制台等等）。
+The Environment Abstraction Layer (EAL) is responsible for gaining access to low-level resources such as hardware and memory space.
+It provides a generic interface that hides the environment specifics from the applications and libraries.
+It is the responsibility of the initialization routine to decide how to allocate these resources
+(that is, memory space, PCI devices, timers, consoles, and so on).
 
-EAL提供的典型服务有：
+Typical services expected from the EAL are:
 
-*   DPDK的加载和启动：DPDK和指定的程序链接成一个独立的进程，并以某种方式加载
+*   DPDK Loading and Launching:
+    The DPDK and its application are linked as a single application and must be loaded by some means.
 
-*   CPU亲和性和分配处理：DPDK提供机制将执行单元绑定到特定的核上，就像创建一个执行程序一样。
+*   Core Affinity/Assignment Procedures:
+    The EAL provides mechanisms for assigning execution units to specific cores as well as creating execution instances.
 
-*   系统内存分配：EAL实现了不同区域内存的分配，例如为设备接口提供了物理内存。
+*   System Memory Reservation:
+    The EAL facilitates the reservation of different memory zones, for example, physical memory areas for device interactions.
 
-*   PCI地址抽象：EAL提供了对PCI地址空间的访问接口
+*   PCI Address Abstraction: The EAL provides an interface to access PCI address space.
 
-*   跟踪调试功能：日志信息，堆栈打印、异常挂起等等。
+*   Trace and Debug Functions: Logs, dump_stack, panic and so on.
 
-*   公用功能：提供了标准libc不提供的自旋锁、原子计数器等。
+*   Utility Functions: Spinlocks and atomic counters that are not provided in libc.
 
-*   CPU特征辨识：用于决定CPU运行时的一些特殊功能，决定当前CPU支持的特性，以便编译对应的二进制文件。
+*   CPU Feature Identification: Determine at runtime if a particular feature, for example, Intel® AVX is supported.
+    Determine if the current CPU supports the feature set that the binary was compiled for.
 
-*   中断处理：提供接口用于向中断注册/解注册回掉函数。
+*   Interrupt Handling: Interfaces to register/unregister callbacks to specific interrupt sources.
 
-*   告警功能：提供接口用于设置/取消指定时间环境下运行的毁掉函数。
+*   Alarm Functions: Interfaces to set/remove callbacks to be run at a specific time.
 
-Linux环境下的EAL
-----------------
+EAL in a Linux-userland Execution Environment
+---------------------------------------------
 
-在Linux用户空间环境，DPDK APP通过pthread库作为一个用户态程序运行。
-设备的PCI信息和地址空间通过 /sys 内核接口及内核模块如uio_pci_generic或igb_uio来发现获取的。
-linux内核文档中UIO描述，设备的UIO信息是在程序中用mmap重新映射的。
+In a Linux user space environment, the DPDK application runs as a user-space application using the pthread library.
+PCI information about devices and address space is discovered through the /sys kernel interface and through kernel modules such as uio_pci_generic, or igb_uio.
+Refer to the UIO: User-space drivers documentation in the Linux kernel. This memory is mmap'd in the application.
 
-EAL通过对hugetlb使用mmap接口来实现物理内存的分配。这部分内存暴露给DPDK服务层，如 :ref:`Mempool Library <Mempool_Library>`。
+The EAL performs physical memory allocation using mmap() in hugetlbfs (using huge page sizes to increase performance).
+This memory is exposed to DPDK service layers such as the :ref:`Mempool Library <Mempool_Library>`.
 
-据此，DPDK服务层可以完成初始化，接着通过设置线程亲和性调用，每个执行单元将会分配给特定的逻辑核，以一个user-level等级的线程来运行。
+At this point, the DPDK services layer will be initialized, then through pthread setaffinity calls,
+each execution unit will be assigned to a specific logical core to run as a user-level thread.
 
-定时器是通过CPU的时间戳计数器TSC或者通过mmap调用内核的HPET系统接口实现。
+The time reference is provided by the CPU Time-Stamp Counter (TSC) or by the HPET kernel API through a mmap() call.
 
+Initialization and Core Launching
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-初始化和运行
-~~~~~~~~~~~~
-
-初始化部分从glibc的开始函数就执行了。
-检查也在初始化过程中被执行，用于保证配置文件所选择的架构宏定义是本CPU所支持的，然后才开始调用main函数。
-Core的初始化和运行时在rte_eal_init()接口上执行的（参考API文档）。它包括对pthread库的调用（更具体的说是
-pthread_self(), pthread_create(), 和pthread_setaffinity_np()函数）。
+Part of the initialization is done by the start function of glibc.
+A check is also performed at initialization time to ensure that the micro architecture type chosen in the config file is supported by the CPU.
+Then, the main() function is called. The core initialization and launch is done in rte_eal_init() (see the API documentation).
+It consist of calls to the pthread library (more specifically, pthread_self(), pthread_create(), and pthread_setaffinity_np()).
 
 .. _figure_linuxapp_launch:
 
 .. figure:: img/linuxapp_launch.*
 
-   EAL在Linux APP环境中被初始化。
+   EAL Initialization in a Linux Application Environment
 
 
 .. note::
 
-    对象的初始化，例如内存区间、ring、内存池、lpm表或hash表等，必须作为整个程序初始化的一部分，在主逻辑核上完成。
-    创建和初始化这些对象的函数不是多线程安全的，但是，一旦初始化完成，这些对象本身可以作为安全线程运行。
+    Initialization of objects, such as memory zones, rings, memory pools, lpm tables and hash tables,
+    should be done as part of the overall application initialization on the master lcore.
+    The creation and initialization functions for these objects are not multi-thread safe.
+    However, once initialized, the objects themselves can safely be used in multiple threads simultaneously.
 
-多进程支持
-~~~~~~~~~~
-
-Linux下APP支持像多线程一样部署多进程运行模式，具体参考 :ref:`Multi-process Support <Multi-process_Support>` 。
-
-内存映射和内存分配
-~~~~~~~~~~~~~~~~~~~
-
-大量连续的物理内存分配时通过hugetlbfs内核文件系统来实现的。
-EAL提供了相应的接口用于申请指定名字的连续内存空间。
-这个API同时会将这段连续空间的地址返回给用户程序。
-
-.. note::
-
-    内存申请时使用rte_malloc接口来做的，它也是hugetlbfs文件系统大页支持的。
-
-Xen Dom0非大页运行支持
-~~~~~~~~~~~~~~~~~~~~~~
-
-现存的内存管理是基于Linux内核的大页机制，
-然而，Xen Dom0并不支持大页，所以要将一个新的内核模块rte_dom0_mem加载上，以便避开这个限制。
-
-EAL使用IOCTL接口用于通告Linux内核模块rte_mem_dom0去申请指定大小的内存块，并从该模块中获取内存段的信息。
-EAL使用MMAP接口来映射这段内存。
-对于申请到的内存段，在其内的物理地址都是连续的，但是实际上，硬件地址只在2M内连续。
-
-PCI 访问
-~~~~~~~~
-
-EAL使用Linux内核提供的文件系统 /sys/bus/pci 来扫描PCI总线上的内容。
-内核模块uio_pci_generic提供了/dev/uioX设备文件及/sys下对应的资源文件用于访问PCI设备。
-DPDK特有的igb_uio模块也提供了相同的功能用于PCI设备的访问。
-这两个驱动模块都用到了Linux内核提供的uio特性。
-
-逻辑核及共享变量
-~~~~~~~~~~~~~~~~
-
-.. note::
-
-    逻辑核就是处理器的逻辑单元，有时候也称为硬件 *线程*。
-
-共享变量是默认的做法。
-每逻辑核变量的实现则是通过线程局部存储技术TLS来实现的，它提供了每个线程本地存储的功能。
-
-
-日志
-~~~~
-
-EAL提供了日志信息接口。
-默认的，在linux 应用程序中，日志信息被发送到syslog和concole中。
-当然，用户可以通过使用不同的日志机制来代替DPDK的日志功能。
-
-
-
-跟踪与调试功能
-^^^^^^^^^^^^^^
-
-Glibc中提供了一些调试函数用于打印堆栈信息。
-Rte_panic函数可以产生一个SIG_ABORT信号，这个信号可以触发产生core文件，可以通过gdb来加载调试。
-
-CPU 特性识别
-~~~~~~~~~~~~
-
-EAL可以在运行时查询CPU状态（使用rte_cpu_get_feature()接口），用于决定哪个CPU可用。
-
-用户空间中断事件
-~~~~~~~~~~~~~~~~
-
-+ 主线程中的用户空间中断和警告处理
-
-EAL创建一个主线程用于轮询UIO设备描述文件以检测中断。
-可以通过EAL提供的函数为特定的中断事件注册/解注册回掉函数，回掉函数在主线程中被异步调用。
-EAL同时也允许像NIC中断那样定时调用回掉函数。
-
-.. note::
-
-    在DPDK的PMD中，主线程只对连接状态改变的中断处理，例如网卡的打开和关闭。
-
-
-+ RX 中断事件
-
-PMD提供的报文收发程序并不只限制于自身轮询下执行。
-为了缓解小吞吐量下轮询模式对CPU资源的浪费，暂停轮询并等待唤醒事件发生时一种有效的手段。
-收包中断是这种场景的一种很好的选择，但也不是唯一的。
-
-EAL提供了事件驱动模式相关的API。以Linux APP为例，其实现依赖于epoll技术。
-每个线程可以监控一个epoll实例，而在实例中可以添加所有需要的wake-up事件文件描述符。
-事件文件描述符创建并根据UIO/VFIO的说明来映射到制定的中断向量上。
-对于BSD APP，可以使用kqueue来代替，但是目前尚未实现。
-
-EAL初始化中断向量和事件文件描述符之间的映射关系，同时每个设备初始化中断向量和队列之间的映射关系，
-这样，EAL实际上并不知道在指定向量上发生的中断，由设备驱动负责执行后面的映射。
-
-.. note::
-
-    每个RX中断事件队列只支持VFIO模式，VFIO支持多个MSI-X向量。
-    在UIO中，收包中断和其他中断共享中断向量，因此，当RX中断和LSC（连接状态改变）中断同时发生时，只有前者生效。
-
-RX中断由API（rte_eth_dev_rx_intr_*）来实现控制、使能、关闭。当PMD不支持时，这些API返回失败。Intr_conf.rxq标识用于打开每个设备的RX中断。
-
-黑名单
-~~~~~~
-
-EAL PCI设备的黑名单功能是用于标识制定NIC端口，以便DPDK忽略该端口。
-可以使用PCIe设备地址描述符（Domain:Bus:Device:Function）将对应端口标记为黑名单。
-
-Misc功能
-~~~~~~~~
-
-包括锁和原子操作（i686和x86-64架构）。
-
-内存段和内存区间
-----------------
-
-物理内存映射就是通过EAL的这个特性实现的。
-物理内存块之间可能是不连续的，所有的内存通过一个内存描述符表进行管理，且每个描述符指向一块连续的物理内存。
-
-基于此，内存区块分配器的作用就是保证分配到一块连续的物理内存。
-这些区块被分配出来时会用一个唯一的名字来标识。
-
-Rte_memzone描述符也在配置结构体中，可以通过rte_eal_get_configuration()接口来获取。
-通过名字访问一个内存区块会返回对应内存区块的描述符。
-
-内存分配可以从指定开始地址和对齐方式来分配（默认是cache line大小对齐），对齐一般是以2的次幂来的，并且不小于64字节对齐。
-内存区可以是2M或是1G大小的内存页，这两者系统都支持。
-
-
-多线程
-------
-
-DPDK通常制定在core上跑线程以避免任务在核上切换的开销。
-这有利于性能的提升，但不总是有效的，并且缺乏灵活性。
-
-电源管理通过限制CPU的运行频率来提升CPU的工作效率。
-当然，我们也可以通过充分利用CPU的空闲周期来提升效率。
-
-通过使用cgroup技术，CPU的使用量可以很方便的分配，这也提供了新的方法来提升CPU性能，
-但是这里有个前提，DPDK必须处理每个核多线程的上下文切换。
-
-想要更多的灵活性，就要设置线程的CPU亲和性是对CPU集合而不是CPU了。
-
-EAL线程和逻辑核亲和性
+Multi-process Support
 ~~~~~~~~~~~~~~~~~~~~~
 
-Lcore适用于EAL线程，一种实际意义上的Linux/FREEBSD线程。
-EAL创建并管理EAL线程，并且通过remote_lanch来执行该线程。
-在每个EAL线程中，有一个lcore_id的TLS作为线程唯一的标识。
-由于EAL线程通常1：1绑定到CPU上，lcore_id通常就是CPU ID。
+The Linuxapp EAL allows a multi-process as well as a multi-threaded (pthread) deployment model.
+See chapter
+:ref:`Multi-process Support <Multi-process_Support>` for more details.
 
-然而，使用多线程时，EAL线程到CPU的映射并不总是1：1的。EAL线程可能设置为对CPU集合的亲和性，
+Memory Mapping Discovery and Memory Reservation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The allocation of large contiguous physical memory is done using the hugetlbfs kernel filesystem.
+The EAL provides an API to reserve named memory zones in this contiguous memory.
+The physical address of the reserved memory for that memory zone is also returned to the user by the memory zone reservation API.
+
+.. note::
+
+    Memory reservations done using the APIs provided by rte_malloc are also backed by pages from the hugetlbfs filesystem.
+
+Xen Dom0 support without hugetbls
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The existing memory management implementation is based on the Linux kernel hugepage mechanism.
+However, Xen Dom0 does not support hugepages, so a new Linux kernel module rte_dom0_mm is added to workaround this limitation.
+
+The EAL uses IOCTL interface to notify the Linux kernel module rte_dom0_mm to allocate memory of specified size,
+and get all memory segments information from the module,
+and the EAL uses MMAP interface to map the allocated memory.
+For each memory segment, the physical addresses are contiguous within it but actual hardware addresses are contiguous within 2MB.
+
+PCI Access
+~~~~~~~~~~
+
+The EAL uses the /sys/bus/pci utilities provided by the kernel to scan the content on the PCI bus.
+To access PCI memory, a kernel module called uio_pci_generic provides a /dev/uioX device file
+and resource files in /sys
+that can be mmap'd to obtain access to PCI address space from the application.
+The DPDK-specific igb_uio module can also be used for this. Both drivers use the uio kernel feature (userland driver).
+
+Per-lcore and Shared Variables
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. note::
+
+    lcore refers to a logical execution unit of the processor, sometimes called a hardware *thread*.
+
+Shared variables are the default behavior.
+Per-lcore variables are implemented using *Thread Local Storage* (TLS) to provide per-thread local storage.
+
+Logs
+~~~~
+
+A logging API is provided by EAL.
+By default, in a Linux application, logs are sent to syslog and also to the console.
+However, the log function can be overridden by the user to use a different logging mechanism.
+
+Trace and Debug Functions
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+There are some debug functions to dump the stack in glibc.
+The rte_panic() function can voluntarily provoke a SIG_ABORT,
+which can trigger the generation of a core file, readable by gdb.
+
+CPU Feature Identification
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The EAL can query the CPU at runtime (using the rte_cpu_get_feature() function) to determine which CPU features are available.
+
+User Space Interrupt Event
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
++ User Space Interrupt and Alarm Handling in Host Thread
+
+The EAL creates a host thread to poll the UIO device file descriptors to detect the interrupts.
+Callbacks can be registered or unregistered by the EAL functions for a specific interrupt event
+and are called in the host thread asynchronously.
+The EAL also allows timed callbacks to be used in the same way as for NIC interrupts.
+
+.. note::
+
+    In DPDK PMD, the only interrupts handled by the dedicated host thread are those for link status change,
+    i.e. link up and link down notification.
+
+
++ RX Interrupt Event
+
+The receive and transmit routines provided by each PMD don't limit themselves to execute in polling thread mode.
+To ease the idle polling with tiny throughput, it's useful to pause the polling and wait until the wake-up event happens.
+The RX interrupt is the first choice to be such kind of wake-up event, but probably won't be the only one.
+
+EAL provides the event APIs for this event-driven thread mode.
+Taking linuxapp as an example, the implementation relies on epoll. Each thread can monitor an epoll instance
+in which all the wake-up events' file descriptors are added. The event file descriptors are created and mapped to
+the interrupt vectors according to the UIO/VFIO spec.
+From bsdapp's perspective, kqueue is the alternative way, but not implemented yet.
+
+EAL initializes the mapping between event file descriptors and interrupt vectors, while each device initializes the mapping
+between interrupt vectors and queues. In this way, EAL actually is unaware of the interrupt cause on the specific vector.
+The eth_dev driver takes responsibility to program the latter mapping.
+
+.. note::
+
+    Per queue RX interrupt event is only allowed in VFIO which supports multiple MSI-X vector. In UIO, the RX interrupt
+    together with other interrupt causes shares the same vector. In this case, when RX interrupt and LSC(link status change)
+    interrupt are both enabled(intr_conf.lsc == 1 && intr_conf.rxq == 1), only the former is capable.
+
+The RX interrupt are controlled/enabled/disabled by ethdev APIs - 'rte_eth_dev_rx_intr_*'. They return failure if the PMD
+hasn't support them yet. The intr_conf.rxq flag is used to turn on the capability of RX interrupt per device.
+
+Blacklisting
+~~~~~~~~~~~~
+
+The EAL PCI device blacklist functionality can be used to mark certain NIC ports as blacklisted,
+so they are ignored by the DPDK.
+The ports to be blacklisted are identified using the PCIe* description (Domain:Bus:Device.Function).
+
+Misc Functions
+~~~~~~~~~~~~~~
+
+Locks and atomic operations are per-architecture (i686 and x86_64).
+
+Memory Segments and Memory Zones (memzone)
+------------------------------------------
+
+The mapping of physical memory is provided by this feature in the EAL.
+As physical memory can have gaps, the memory is described in a table of descriptors,
+and each descriptor (called rte_memseg ) describes a contiguous portion of memory.
+
+On top of this, the memzone allocator's role is to reserve contiguous portions of physical memory.
+These zones are identified by a unique name when the memory is reserved.
+
+The rte_memzone descriptors are also located in the configuration structure.
+This structure is accessed using rte_eal_get_configuration().
+The lookup (by name) of a memory zone returns a descriptor containing the physical address of the memory zone.
+
+Memory zones can be reserved with specific start address alignment by supplying the align parameter
+(by default, they are aligned to cache line size).
+The alignment value should be a power of two and not less than the cache line size (64 bytes).
+Memory zones can also be reserved from either 2 MB or 1 GB hugepages, provided that both are available on the system.
+
+
+Multiple pthread
+----------------
+
+DPDK usually pins one pthread per core to avoid the overhead of task switching.
+This allows for significant performance gains, but lacks flexibility and is not always efficient.
+
+Power management helps to improve the CPU efficiency by limiting the CPU runtime frequency.
+However, alternately it is possible to utilize the idle cycles available to take advantage of
+the full capability of the CPU.
+
+By taking advantage of cgroup, the CPU utilization quota can be simply assigned.
+This gives another way to improve the CPU efficiency, however, there is a prerequisite;
+DPDK must handle the context switching between multiple pthreads per core.
+
+For further flexibility, it is useful to set pthread affinity not only to a CPU but to a CPU set.
+
+EAL pthread and lcore Affinity
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The term "lcore" refers to an EAL thread, which is really a Linux/FreeBSD pthread.
+"EAL pthreads"  are created and managed by EAL and execute the tasks issued by *remote_launch*.
+In each EAL pthread, there is a TLS (Thread Local Storage) called *_lcore_id* for unique identification.
+As EAL pthreads usually bind 1:1 to the physical CPU, the *_lcore_id* is typically equal to the CPU ID.
+
 When using multiple pthreads, however, the binding is no longer always 1:1 between an EAL pthread and a specified physical CPU.
 The EAL pthread may have affinity to a CPU set, and as such the *_lcore_id* will not be the same as the CPU ID.
 For this reason, there is an EAL long option '--lcores' defined to assign the CPU affinity of lcores.

@@ -232,15 +232,14 @@ DPDK通常制定在core上跑线程以避免任务在核上切换的开销。
 
 想要更多的灵活性，就要设置线程的CPU亲和性是对CPU集合而不是CPU了。
 
-EAL线程和逻辑核亲和性
-~~~~~~~~~~~~~~~~~~~~~
+EAL pthread and lcore Affinity
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Lcore适用于EAL线程，一种实际意义上的Linux/FREEBSD线程。
-EAL创建并管理EAL线程，并且通过remote_lanch来执行该线程。
-在每个EAL线程中，有一个lcore_id的TLS作为线程唯一的标识。
-由于EAL线程通常1：1绑定到CPU上，lcore_id通常就是CPU ID。
+The term "lcore" refers to an EAL thread, which is really a Linux/FreeBSD pthread.
+"EAL pthreads"  are created and managed by EAL and execute the tasks issued by *remote_launch*.
+In each EAL pthread, there is a TLS (Thread Local Storage) called *_lcore_id* for unique identification.
+As EAL pthreads usually bind 1:1 to the physical CPU, the *_lcore_id* is typically equal to the CPU ID.
 
-然而，使用多线程时，EAL线程到CPU的映射并不总是1：1的。EAL线程可能设置为对CPU集合的亲和性，
 When using multiple pthreads, however, the binding is no longer always 1:1 between an EAL pthread and a specified physical CPU.
 The EAL pthread may have affinity to a CPU set, and as such the *_lcore_id* will not be the same as the CPU ID.
 For this reason, there is an EAL long option '--lcores' defined to assign the CPU affinity of lcores.
@@ -269,84 +268,79 @@ If a '\@cpu_set' value is not supplied, the value of 'cpu_set' will default to t
 Using this option, for each given lcore ID, the associated CPUs can be assigned.
 It's also compatible with the pattern of corelist('-l') option.
 
-non-EAL pthread support
-~~~~~~~~~~~~~~~~~~~~~~~
+非EAL的线程支持
+~~~~~~~~~~~~~~~
 
-It is possible to use the DPDK execution context with any user pthread (aka. Non-EAL pthreads).
-In a non-EAL pthread, the *_lcore_id* is always LCORE_ID_ANY which identifies that it is not an EAL thread with a valid, unique, *_lcore_id*.
-Some libraries will use an alternative unique ID (e.g. TID), some will not be impacted at all, and some will work but with limitations (e.g. timer and mempool libraries).
+可以在任何用户线程（non-EAL线程）上执行DPDK任务上下文。
+在non-EAL线程中，*_lcore_id* 始终是 LCORE_ID_ANY，它标识一个no-EAL线程的有效、唯一的 *_lcore_id*。
+一些库可能会使用一个唯一的ID替代，一些库将不受影响，有些库虽然能工作，但是会受到限制（如定时器和内存池库）。
 
-All these impacts are mentioned in :ref:`known_issue_label` section.
+所有这些影响将在 :ref:`known_issue_label` 章节中提到。
 
-Public Thread API
-~~~~~~~~~~~~~~~~~
+公共线程API
+~~~~~~~~~~~
 
-There are two public APIs ``rte_thread_set_affinity()`` and ``rte_pthread_get_affinity()`` introduced for threads.
-When they're used in any pthread context, the Thread Local Storage(TLS) will be set/get.
+DPDK为线程操作引入了两个公共API ``rte_thread_set_affinity()`` 和 ``rte_pthread_get_affinity()``。
+当他们在任何线程上下文中调用时，将获取或设置线程本地存储(TLS)。
 
-Those TLS include *_cpuset* and *_socket_id*:
+这些TLS包括 *_cpuset* 和 *_socket_id*：
 
-*	*_cpuset* stores the CPUs bitmap to which the pthread is affinitized.
+*	*_cpuset* 存储了与线程相关联的CPU位图。
 
-*	*_socket_id* stores the NUMA node of the CPU set. If the CPUs in CPU set belong to different NUMA node, the *_socket_id* will be set to SOCKET_ID_ANY.
+*	*_socket_id* 存储了CPU set所在的NUMA节点。如果CPU set中的cpu属于不同的NUMA节点, *_socket_id* 将设置为SOCKET_ID_ANY。
 
 
 .. _known_issue_label:
 
-Known Issues
-~~~~~~~~~~~~
+已知问题
+~~~~~~~~
 
 + rte_mempool
 
-  The rte_mempool uses a per-lcore cache inside the mempool.
-  For non-EAL pthreads, ``rte_lcore_id()`` will not return a valid number.
-  So for now, when rte_mempool is used with non-EAL pthreads, the put/get operations will bypass the default mempool cache and there is a performance penalty because of this bypass.
-  Only user-owned external caches can be used in a non-EAL context in conjunction with ``rte_mempool_generic_put()`` and ``rte_mempool_generic_get()`` that accept an explicit cache parameter.
+  rte_mempool在mempool中使用per-lcore缓存。对于non-EAL线程，``rte_lcore_id()`` 无法返回一个合法的值。
+  因此，当rte_mempool与non-EAL线程一起使用时，put/get操作将绕过默认的mempool缓存，这个旁路操作将造成性能损失。
+  结合 ``rte_mempool_generic_put()`` 和 ``rte_mempool_generic_get()`` 可以在non-EAL线程中使用用户拥有的外部缓存。
 
 + rte_ring
 
-  rte_ring supports multi-producer enqueue and multi-consumer dequeue.
-  However, it is non-preemptive, this has a knock on effect of making rte_mempool non-preemptable.
+  rte_ring支持多生产者入队和多消费者出队操作。
+  然而，这是非抢占的，这使得rte_mempool操作都是非抢占的。
 
   .. note::
 
-    The "non-preemptive" constraint means:
+    "非抢占" 意味着：
 
-    - a pthread doing multi-producers enqueues on a given ring must not
-      be preempted by another pthread doing a multi-producer enqueue on
-      the same ring.
-    - a pthread doing multi-consumers dequeues on a given ring must not
-      be preempted by another pthread doing a multi-consumer dequeue on
-      the same ring.
+    - 在给定的ring上做入队操作的pthread不能被另一个在同一个ring上做入队的pthread抢占
+    - 在给定ring上做出对操作的pthread不能被另一个在同一ring上做出队的pthread抢占
 
-    Bypassing this constraint may cause the 2nd pthread to spin until the 1st one is scheduled again.
-    Moreover, if the 1st pthread is preempted by a context that has an higher priority, it may even cause a dead lock.
+    绕过此约束则可能造成第二个进程自旋等待，知道第一个进程再次被调度为止。
+    此外，如果第一个线程被优先级较高的上下文抢占，甚至可能造成死锁。
 
-  This does not mean it cannot be used, simply, there is a need to narrow down the situation when it is used by multi-pthread on the same core.
+  这并不意味着不能使用它，简单讲，当同一个core上的多线程使用时，需要缩小这种情况。
 
-  1. It CAN be used for any single-producer or single-consumer situation.
+  1. 它可以用于任一单一生产者或者单一消费者的情况。
 
-  2. It MAY be used by multi-producer/consumer pthread whose scheduling policy are all SCHED_OTHER(cfs). User SHOULD be aware of the performance penalty before using it.
+  2. 它可以由多生产者/多消费者使用，要求调度策略都是SCHED_OTHER(cfs)。用户需要预先了解性能损失。
 
-  3. It MUST not be used by multi-producer/consumer pthreads, whose scheduling policies are SCHED_FIFO or SCHED_RR.
+  3. 它不能被调度策略是SCHED_FIFO 或 SCHED_RR的多生产者/多消费者使用。
 
 + rte_timer
 
-  Running  ``rte_timer_manager()`` on a non-EAL pthread is not allowed. However, resetting/stopping the timer from a non-EAL pthread is allowed.
+  不允许在non-EAL线程上运行 ``rte_timer_manager()``。但是，允许在non-EAL线程上重置/停止定时器。
 
 + rte_log
 
-  In non-EAL pthreads, there is no per thread loglevel and logtype, global loglevels are used.
+  在non-EAL线程上，没有per thread loglevel和logtype，但是global loglevels可以使用。
 
 + misc
 
-  The debug statistics of rte_ring, rte_mempool and rte_timer are not supported in a non-EAL pthread.
+  在non-EAL线程上不支持rte_ring, rte_mempool 和rte_timer的调试统计信息。
 
-cgroup control
-~~~~~~~~~~~~~~
+cgroup控制
+~~~~~~~~~~
 
-The following is a simple example of cgroup control usage, there are two pthreads(t0 and t1) doing packet I/O on the same core ($CPU).
-We expect only 50% of CPU spend on packet IO.
+以下是cgroup控件使用的简单示例，在同一个核心($CPU)上两个线程(t0 and t1)执行数据包I/O。
+我们期望只有50%的CPU消耗在数据包IO操作上。
 
   .. code-block:: console
 
@@ -366,95 +360,75 @@ We expect only 50% of CPU spend on packet IO.
     echo  50000 > pkt_io/cpu.cfs_quota_us
 
 
-Malloc
-------
+内存申请
+--------
 
-The EAL provides a malloc API to allocate any-sized memory.
+EAL提供了一个malloc API用于申请任意大小内存。
 
-The objective of this API is to provide malloc-like functions to allow
-allocation from hugepage memory and to facilitate application porting.
-The *DPDK API Reference* manual describes the available functions.
 
-Typically, these kinds of allocations should not be done in data plane
-processing because they are slower than pool-based allocation and make
-use of locks within the allocation and free paths.
-However, they can be used in configuration code.
+这个API的目的是提供类似malloc的功能，以允许从hugepage中分配内存并方便应用程序移植。
+*DPDK API参考手册* 介绍了可用的功能。
 
-Refer to the rte_malloc() function description in the *DPDK API Reference*
-manual for more information.
+通常，这些类型的分配不应该在数据面处理中进行，因为他们比基于池的分配慢，并且在分配和释放路径中使用了锁操作。
+但是，他们可以在配置代码中使用。
+
+更多信息请参阅 *DPDK API参考手册* 中rte_malloc()函数描述。
 
 Cookies
 ~~~~~~~
 
-When CONFIG_RTE_MALLOC_DEBUG is enabled, the allocated memory contains
-overwrite protection fields to help identify buffer overflows.
+当 CONFIG_RTE_MALLOC_DEBUG 开启时，分配的内存包括保护字段，这个字段用于帮助识别缓冲区溢出。
 
-Alignment and NUMA Constraints
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+对齐和NUMA约束
+~~~~~~~~~~~~~~
 
-The rte_malloc() takes an align argument that can be used to request a memory
-area that is aligned on a multiple of this value (which must be a power of two).
+接口rte_malloc()传入一个对齐参数，该参数用于请求在该值的倍数上对齐的内存区域(这个值必须是2的幂)。
 
-On systems with NUMA support, a call to the rte_malloc() function will return
-memory that has been allocated on the NUMA socket of the core which made the call.
-A set of APIs is also provided, to allow memory to be explicitly allocated on a
-NUMA socket directly, or by allocated on the NUMA socket where another core is
-located, in the case where the memory is to be used by a logical core other than
-on the one doing the memory allocation.
+在支持NUMA的系统上，对rte_malloc()接口调用将返回在调用函数的core所在的插槽上分配的内存。
+DPDK还提供了另一组API，以允许在NUMA插槽上直接显式分配内存，或者分配另一个NUAM插槽上的内存。
 
-Use Cases
-~~~~~~~~~
+用例
+~~~~
 
-This API is meant to be used by an application that requires malloc-like
-functions at initialization time.
+这个API旨在由初始化时需要类似malloc功能的应用程序调用。
 
-For allocating/freeing data at runtime, in the fast-path of an application,
-the memory pool library should be used instead.
+为了在运行时分配/释放数据，在应用程序的快速路径中，应该使用内存池库。
 
-Internal Implementation
-~~~~~~~~~~~~~~~~~~~~~~~
+内部实现
+~~~~~~~~
 
-Data Structures
-^^^^^^^^^^^^^^^
+数据结构
+^^^^^^^^
 
-There are two data structure types used internally in the malloc library:
+Malloc库中内部使用两种数据结构类型：
 
-*   struct malloc_heap - used to track free space on a per-socket basis
+*   struct malloc_heap - 用于在每个插槽上跟踪可用内存空间
 
-*   struct malloc_elem - the basic element of allocation and free-space
-    tracking inside the library.
+*   struct malloc_elem - 库内部分配和释放空间跟踪的基本要素
 
 Structure: malloc_heap
 """"""""""""""""""""""
 
-The malloc_heap structure is used to manage free space on a per-socket basis.
-Internally, there is one heap structure per NUMA node, which allows us to
-allocate memory to a thread based on the NUMA node on which this thread runs.
-While this does not guarantee that the memory will be used on that NUMA node,
-it is no worse than a scheme where the memory is always allocated on a fixed
-or random node.
+数据结构malloc_heap用于管理每个插槽上的可用内存空间。
+在内部，每个NUMA节点有一个堆结构，这允许我们根据此线程运行的NUMA节点为线程分配内存。
+虽然这并不能保证在NUMA节点上使用内存，但是它并不比内存总是在固定或随机节点上的方案更糟。
 
-The key fields of the heap structure and their function are described below
-(see also diagram above):
+堆结构及其关键字段和功能描述如下：
 
-*   lock - the lock field is needed to synchronize access to the heap.
-    Given that the free space in the heap is tracked using a linked list,
-    we need a lock to prevent two threads manipulating the list at the same time.
+*   lock - 需要锁来同步对堆的访问。
+    假定使用链表来跟踪堆中的可用空间，我们需要一个锁来防止多个线程同时处理该链表。
 
-*   free_head - this points to the first element in the list of free nodes for
-    this malloc heap.
+*   free_head - 指向这个malloc堆的空闲结点链表中的第一个元素
 
 .. note::
 
-    The malloc_heap structure does not keep track of in-use blocks of memory,
-    since these are never touched except when they are to be freed again -
-    at which point the pointer to the block is an input to the free() function.
+    数据结构malloc_heap并不会跟踪使用的内存块，因为除了要再次释放他们之外，他们不会被接触，需要释放时，将指向块的指针作为参数传给fres函数。
 
 .. _figure_malloc_heap:
 
 .. figure:: img/malloc_heap.*
 
-   Example of a malloc heap and malloc elements within the malloc library
+   Malloc库中malloc heap 和 malloc elements。
 
 
 .. _malloc_elem:
@@ -462,29 +436,24 @@ The key fields of the heap structure and their function are described below
 Structure: malloc_elem
 """"""""""""""""""""""
 
-The malloc_elem structure is used as a generic header structure for various
-blocks of memory.
-It is used in three different ways - all shown in the diagram above:
+数据结构malloc_elem用作各种内存块的通用头结构。
+它以三种不同的方式使用，如上图所示：
 
-#.  As a header on a block of free or allocated memory - normal case
+#.  作为一个释放/申请内存的头部 -- 正常使用
 
-#.  As a padding header inside a block of memory
+#.  作为内存块内部填充头
 
-#.  As an end-of-memseg marker
+#.  作为内存结尾标记
 
-The most important fields in the structure and how they are used are described below.
+结构中重要的字段和使用方法如下所述：
 
 .. note::
 
-    If the usage of a particular field in one of the above three usages is not
-    described, the field can be assumed to have an undefined value in that
-    situation, for example, for padding headers only the "state" and "pad"
-    fields have valid values.
+    如果一个字段没有上述三个用法之一的用处，则可以假设对应字段在该情况下具有未定义的值。
+    例如，对于填充头，只有 "state" 和 "pad"字段具有有效的值。
 
-*   heap - this pointer is a reference back to the heap structure from which
-    this block was allocated.
-    It is used for normal memory blocks when they are being freed, to add the
-    newly-freed block to the heap's free-list.
+*   heap - 这个指针指向了该内存块从哪个堆申请。
+    它被用于正常的内存块，当他们被释放时，将新释放的块添加到堆的空闲列表中。
 
 *   prev - this pointer points to the header element/block in the memseg
     immediately behind the current one. When freeing a block, this pointer is
@@ -525,8 +494,8 @@ The most important fields in the structure and how they are used are described b
     a "next" pointer to identify the location of the next block of memory that
     in the case of being ``FREE``, the two free blocks can be merged into one.
 
-Memory Allocation
-^^^^^^^^^^^^^^^^^
+申请内存
+^^^^^^^^
 
 On EAL initialization, all memsegs are setup as part of the malloc heap.
 This setup involves placing a dummy structure at the end with ``BUSY`` state,
@@ -568,8 +537,8 @@ that no adjustment of the free list needs to take place - the existing element
 on the free list just has its size pointer adjusted, and the following element
 has its "prev" pointer redirected to the newly created element.
 
-Freeing Memory
-^^^^^^^^^^^^^^
+释放内存
+^^^^^^^^
 
 To free an area of memory, the pointer to the start of the data area is passed
 to the free function.

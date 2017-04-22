@@ -455,44 +455,24 @@ Structure: malloc_elem
 *   heap - 这个指针指向了该内存块从哪个堆申请。
     它被用于正常的内存块，当他们被释放时，将新释放的块添加到堆的空闲列表中。
 
-*   prev - this pointer points to the header element/block in the memseg
-    immediately behind the current one. When freeing a block, this pointer is
-    used to reference the previous block to check if that block is also free.
-    If so, then the two free blocks are merged to form a single larger block.
+*   prev - 这个指针用于指向紧跟这当前memseg的头元素。当释放一个内存块时，该指针用于引用上一个内存块，检查上一个块是否也是空闲。
+    如果空闲，则将两个空闲块合并成一个大块。
 
-*   next_free - this pointer is used to chain the free-list of unallocated
-    memory blocks together.
-    It is only used in normal memory blocks; on ``malloc()`` to find a suitable
-    free block to allocate and on ``free()`` to add the newly freed element to
-    the free-list.
+*   next_free - 这个指针用于将空闲块列表连接在一起。
+    它用于正常的内存块，在 ``malloc()`` 接口中用于找到一个合适的空闲块申请出来，在 ``free()`` 函数中用于将内存块添加到空闲链表。
 
-*   state - This field can have one of three values: ``FREE``, ``BUSY`` or
-    ``PAD``.
-    The former two are to indicate the allocation state of a normal memory block
-    and the latter is to indicate that the element structure is a dummy structure
-    at the end of the start-of-block padding, i.e. where the start of the data
-    within a block is not at the start of the block itself, due to alignment
-    constraints.
-    In that case, the pad header is used to locate the actual malloc element
-    header for the block.
-    For the end-of-memseg structure, this is always a ``BUSY`` value, which
-    ensures that no element, on being freed, searches beyond the end of the
-    memseg for other blocks to merge with into a larger free area.
+*   state - 该字段可以有三个可能值：``FREE``, ``BUSY`` 或 ``PAD``。
+    前两个是指示正常内存块的分配状态，后者用于指示元素结构是在块开始填充结束时的虚拟结构，即，由于对齐限制，块内的数据开始的地方不在块本身的开始处。
+	在这种情况下，pad头用于定位块的实际malloc元素头。
+    对于结尾的结构，这个字段总是 ``BUSY`` ，它确保没有元素在释放之后搜索超过 memseg的结尾以供其它块合并到更大的空闲块。
 
-*   pad - this holds the length of the padding present at the start of the block.
-    In the case of a normal block header, it is added to the address of the end
-    of the header to give the address of the start of the data area, i.e. the
-    value passed back to the application on a malloc.
-    Within a dummy header inside the padding, this same value is stored, and is
-    subtracted from the address of the dummy header to yield the address of the
-    actual block header.
+*   pad - 这个字段为块开始处的填充长度。
+    在正常块头部情况下，它被添加到头结构的结尾，以给出数据区的开始地址，即在malloc上传回的地址。
+    在填充虚拟头部时，存储相同的值，并从虚拟头部的地址中减去实际块头部的地址。
 
-*   size - the size of the data block, including the header itself.
-    For end-of-memseg structures, this size is given as zero, though it is never
-    actually checked.
-    For normal blocks which are being freed, this size value is used in place of
-    a "next" pointer to identify the location of the next block of memory that
-    in the case of being ``FREE``, the two free blocks can be merged into one.
+*   size - 数据块的大小，包括头部本身。
+    对于结尾结构，这个大小需要指定为0，虽然从未使用。
+    对于正在释放的正常内存块，使用此大小值替代 "next" 指针，以标识下一个块的存储位置，在 ``FREE`` 情况下，可以合并两个空闲块。
 
 申请内存
 ^^^^^^^^
@@ -502,55 +482,35 @@ This setup involves placing a dummy structure at the end with ``BUSY`` state,
 which may contain a sentinel value if ``CONFIG_RTE_MALLOC_DEBUG`` is enabled,
 and a proper :ref:`element header<malloc_elem>` with ``FREE`` at the start
 for each memseg.
-The ``FREE`` element is then added to the ``free_list`` for the malloc heap.
+``FREE``元素被添加到malloc堆的空闲列表中。
 
-When an application makes a call to a malloc-like function, the malloc function
-will first index the ``lcore_config`` structure for the calling thread, and
-determine the NUMA node of that thread.
-The NUMA node is used to index the array of ``malloc_heap`` structures which is
-passed as a parameter to the ``heap_alloc()`` function, along with the
-requested size, type, alignment and boundary parameters.
+当应用程序调用类似malloc功能的函数时，malloc函数将首先为调用线程索引 ``lcore_config`` 结构，并确定该线程的NUMA节点。
+NUMA节点将作为参数传给 ``heap_alloc()``函数，用于索引 ``malloc_heap`` 结构数组。参与索引参数还有大小、类型、对齐方式和边界参数。
 
-The ``heap_alloc()`` function will scan the free_list of the heap, and attempt
-to find a free block suitable for storing data of the requested size, with the
-requested alignment and boundary constraints.
+函数 ``heap_alloc()`` 将扫描堆的空闲链表，尝试找到一个适用于所请求的大小、对齐方式和边界约束的内存块。
 
-When a suitable free element has been identified, the pointer to be returned
-to the user is calculated.
-The cache-line of memory immediately preceding this pointer is filled with a
-struct malloc_elem header.
-Because of alignment and boundary constraints, there could be free space at
-the start and/or end of the element, resulting in the following behavior:
+当已经识别出合适的空闲元素时，将计算要返回给用户的指针。
+紧跟在该指针之前的内存的高速缓存行填充了一个malloc_elem头部。
+由于对齐和边界约束，在元素的开头和结尾可能会有空闲的空间，这将导致已下行为：
 
-#. Check for trailing space.
-   If the trailing space is big enough, i.e. > 128 bytes, then the free element
-   is split.
-   If it is not, then we just ignore it (wasted space).
+#. 检查尾随空间。
+   如果尾部空间足够大，例如 > 128 字节，那么空闲元素将被分割。
+   否则，仅仅忽略它（浪费空间）。
 
-#. Check for space at the start of the element.
-   If the space at the start is small, i.e. <=128 bytes, then a pad header is
-   used, and the remaining space is wasted.
-   If, however, the remaining space is greater, then the free element is split.
+#. 检查元素开始处的空间。
+   如果起始处的空间很小， <=128 字节，那么使用填充头，这部分空间被浪费。
+   但是，如果空间很大，那么空闲元素将被分割。
 
-The advantage of allocating the memory from the end of the existing element is
-that no adjustment of the free list needs to take place - the existing element
-on the free list just has its size pointer adjusted, and the following element
-has its "prev" pointer redirected to the newly created element.
+从现有元素的末尾分配内存的优点是不需要调整空闲链表，
+空闲链表中现有元素仅调整大小指针，并且后面的元素使用 "prev" 指针重定向到新创建的元素位置。
 
 释放内存
 ^^^^^^^^
 
-To free an area of memory, the pointer to the start of the data area is passed
-to the free function.
-The size of the ``malloc_elem`` structure is subtracted from this pointer to get
-the element header for the block.
-If this header is of type ``PAD`` then the pad length is further subtracted from
-the pointer to get the proper element header for the entire block.
+要释放内存，将指向数据区开始的指针传递给free函数。
+从该指针中减去 ``malloc_elem`` 结构的大小，以获得内存块元素头部。
+如果这个头部类型是 ``PAD``，那么进一步减去pad长度，以获得整个块的正确元素头。
 
-From this element header, we get pointers to the heap from which the block was
-allocated and to where it must be freed, as well as the pointer to the previous
-element, and via the size field, we can calculate the pointer to the next element.
-These next and previous elements are then checked to see if they are also
-``FREE``, and if so, they are merged with the current element.
-This means that we can never have two ``FREE`` memory blocks adjacent to one
-another, as they are always merged into a single block.
+从这个元素头中，我们获得指向块所分配的堆的指针及必须被释放的位置，以及指向前一个元素的指针，
+并且通过size字段，可以计算下一个元素的指针。
+这意味着我们永远不会有两个相邻的 ``FREE`` 内存块，因为他们总是会被合并成一个大的块。

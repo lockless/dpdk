@@ -30,114 +30,111 @@
 
 .. _Ring_Library:
 
-Ring Library
-============
+Ring 库
+=======
 
-The ring allows the management of queues.
-Instead of having a linked list of infinite size, the rte_ring has the following properties:
+环形缓冲区支持队列管理。rte_ring并不是具有无限大小的链表，它具有如下属性：
 
-*   FIFO
+*   先进先出（FIFO）
 
-*   Maximum size is fixed, the pointers are stored in a table
+*   最大大小固定，指针存储在表中
 
-*   Lockless implementation
+*   无锁实现
 
-*   Multi-consumer or single-consumer dequeue
+*   多消费者或单消费者出队操作
 
-*   Multi-producer or single-producer enqueue
+*   多生产者或单生产者入队操作
 
-*   Bulk dequeue - Dequeues the specified count of objects if successful; otherwise fails
+*   批量出队 - 如果成功，将指定数量的元素出队，否则什么也不做
 
-*   Bulk enqueue - Enqueues the specified count of objects if successful; otherwise fails
+*   批量入队 - 如果成功，将指定数量的元素入队，否则什么也不做
 
-*   Burst dequeue - Dequeue the maximum available objects if the specified count cannot be fulfilled
+*   突发出队 - 如果指定的数目出队失败，则将最大可用数目对象出队
 
-*   Burst enqueue - Enqueue the maximum available objects if the specified count cannot be fulfilled
+*   突发入队 - 如果指定的数目入队失败，则将最大可入队数目对象入队
 
-The advantages of this data structure over a linked list queue are as follows:
+相比于链表，这个数据结构的优点如下：
 
-*   Faster; only requires a single Compare-And-Swap instruction of sizeof(void \*) instead of several double-Compare-And-Swap instructions.
+*   更快；只需要一个sizeof(void \*)的Compare-And-Swap指令，而不是多个双重比较和交换指令
 
-*   Simpler than a full lockless queue.
+*   与完全无锁队列像是
 
-*   Adapted to bulk enqueue/dequeue operations.
-    As pointers are stored in a table, a dequeue of several objects will not produce as many cache misses as in a linked queue.
-    Also, a bulk dequeue of many objects does not cost more than a dequeue of a simple object.
+*   适应批量入队/出队操作。
+    因为指针是存储在表中的，应i多个对象的出队将不会产生于链表队列中一样多的cache miss。
+    此外，批量出队成本并不比单个对象出队高。
 
-The disadvantages:
+缺点：
 
-*   Size is fixed
+*   大小固定
 
-*   Having many rings costs more in terms of memory than a linked list queue. An empty ring contains at least N pointers.
+*   大量ring相比于链表，消耗更多的内存，空ring至少包含n个指针。
 
-A simplified representation of a Ring is shown in with consumer and producer head and tail pointers to objects stored in the data structure.
+数据结构中存储的生产者和消费者头部和尾部指针显示了一个简化版本的ring。
 
 .. _figure_ring1:
 
 .. figure:: img/ring1.*
 
-   Ring Structure
+   Ring 结构
 
 
-References for Ring Implementation in FreeBSD*
-----------------------------------------------
+FreeBSD* 中 Ring 的实现参考
+---------------------------
 
-The following code was added in FreeBSD 8.0, and is used in some network device drivers (at least in Intel drivers):
+FreeBSD 8.0中添加了如下代码，并应用到了某些网络设备驱动程序中（至少Interl驱动中应用了）：
 
     * `bufring.h in FreeBSD <http://svn.freebsd.org/viewvc/base/release/8.0.0/sys/sys/buf_ring.h?revision=199625&amp;view=markup>`_
 
     * `bufring.c in FreeBSD <http://svn.freebsd.org/viewvc/base/release/8.0.0/sys/kern/subr_bufring.c?revision=199625&amp;view=markup>`_
 
-Lockless Ring Buffer in Linux*
-------------------------------
+Linux* 中的无锁环形缓冲区
+-------------------------
 
-The following is a link describing the `Linux Lockless Ring Buffer Design <http://lwn.net/Articles/340400/>`_.
+参考链接 `Linux Lockless Ring Buffer Design <http://lwn.net/Articles/340400/>`_.
 
-Additional Features
--------------------
+附加功能
+--------
 
 Name
 ~~~~
 
-A ring is identified by a unique name.
-It is not possible to create two rings with the same name (rte_ring_create() returns NULL if this is attempted).
+每个ring都有唯一的名字。
+用户不可能创建两个具有相同名称的ring（如果尝试调用rte_ring_create()这样做的话，将返回NULL）。
 
-Use Cases
+使用场景
 ---------
 
-Use cases for the Ring library include:
+Ring库的使用情况包括：
 
-    *  Communication between applications in the DPDK
+    *  DPDK app之间的交互
 
-    *  Used by memory pool allocator
+    *  用于内存池申请
 
-Anatomy of a Ring Buffer
-------------------------
+Ring Buffer解析
+---------------
 
-This section explains how a ring buffer operates.
-The ring structure is composed of two head and tail couples; one is used by producers and one is used by the consumers.
-The figures of the following sections refer to them as prod_head, prod_tail, cons_head and cons_tail.
+本节介绍ring buffer的运行方式。
+Ring结构有两组头尾指针组成，一组被生产者调用，一组被消费者调用。
+以下将简单称为 prod_head、prod_tail、cons_head 及 cons_tail。
 
-Each figure represents a simplified state of the ring, which is a circular buffer.
-The content of the function local variables is represented on the top of the figure,
-and the content of ring structure is represented on the bottom of the figure.
+每个图代表了ring的简化状态，是一个循环缓冲器。
+本地变量的内容在图上方表示，Ring结构的内容在图下方表示。
 
-Single Producer Enqueue
-~~~~~~~~~~~~~~~~~~~~~~~
+单生产者入队
+~~~~~~~~~~~~
 
-This section explains what occurs when a producer adds an object to the ring.
-In this example, only the producer head and tail (prod_head and prod_tail) are modified,
-and there is only one producer.
+本节介绍了一个生产者向队列添加对象的情况。
+在本例中，只有生产者头和尾指针(prod_head and prod_tail)被修改，只有一个生产者。
 
-The initial state is to have a prod_head and prod_tail pointing at the same location.
+初始状态是将prod_head 和 prod_tail 指向相同的位置。
 
-Enqueue First Step
-^^^^^^^^^^^^^^^^^^
+入队第一步
+^^^^^^^^^^
 
-First, *ring->prod_head* and ring->cons_tail are copied in local variables.
-The prod_next local variable points to the next element of the table, or several elements after in case of bulk enqueue.
+首先， *ring->prod_head* 和 *ring->cons_tail*复制到本地变量中。
+*prod_next* 本地变量指向下一个元素，或者，如果是批量入队的话，指向下几个元素。
 
-If there is not enough room in the ring (this is detected by checking cons_tail), it returns an error.
+如果ring中没有足够的空间存储元素的话(通过检查cons_tail来确定)，则返回错误。
 
 
 .. _figure_ring-enqueue1:
@@ -147,12 +144,12 @@ If there is not enough room in the ring (this is detected by checking cons_tail)
    Enqueue first step
 
 
-Enqueue Second Step
-^^^^^^^^^^^^^^^^^^^
+入队第二步
+^^^^^^^^^^
 
-The second step is to modify *ring->prod_head* in ring structure to point to the same location as prod_next.
+第二步是在环结构中修改 *ring->prod_head*，以指向与prod_next相同的位置。
 
-A pointer to the added object is copied in the ring (obj4).
+指向待添加对象的指针被复制到ring中。
 
 
 .. _figure_ring-enqueue2:
@@ -162,11 +159,11 @@ A pointer to the added object is copied in the ring (obj4).
    Enqueue second step
 
 
-Enqueue Last Step
-^^^^^^^^^^^^^^^^^
+入队最后一步
+^^^^^^^^^^^^
 
-Once the object is added in the ring, ring->prod_tail in the ring structure is modified to point to the same location as *ring->prod_head*.
-The enqueue operation is finished.
+一旦将对象添加到ring中，ring结构中的 *ring->prod_tail* 将被修改，指向与 *ring->prod_head* 相同的位置。
+入队操作完成。
 
 
 .. _figure_ring-enqueue3:
@@ -176,21 +173,21 @@ The enqueue operation is finished.
    Enqueue last step
 
 
-Single Consumer Dequeue
-~~~~~~~~~~~~~~~~~~~~~~~
+单消费者出队
+~~~~~~~~~~~~
 
-This section explains what occurs when a consumer dequeues an object from the ring.
-In this example, only the consumer head and tail (cons_head and cons_tail) are modified and there is only one consumer.
+本节介绍一个消费者从ring中取出对象的情况。
+在本例中，只有消费者头尾指针(cons_head and cons_tail)被修改，只有一个消费者。
 
-The initial state is to have a cons_head and cons_tail pointing at the same location.
+初始状态是将cons_head 和 cons_tail指向相同位置。
 
-Dequeue First Step
-^^^^^^^^^^^^^^^^^^
+出队第一步
+^^^^^^^^^^^^^
 
-First, ring->cons_head and ring->prod_tail are copied in local variables.
-The cons_next local variable points to the next element of the table, or several elements after in the case of bulk dequeue.
+首先，将 *ring->cons_head* 和 *ring->prod_tail*复制到局部变量中。
+*cons_next* 本地变量指向表的下一个元素，或者在批量出队的情况下指向下几个元素。
 
-If there are not enough objects in the ring (this is detected by checking prod_tail), it returns an error.
+如果ring中没有足够的对象用于出队(通过检查prod_tail)，将返回错误。
 
 
 .. _figure_ring-dequeue1:
@@ -200,12 +197,12 @@ If there are not enough objects in the ring (this is detected by checking prod_t
    Dequeue last step
 
 
-Dequeue Second Step
-^^^^^^^^^^^^^^^^^^^
+出队第二步
+^^^^^^^^^^^^
 
-The second step is to modify ring->cons_head in the ring structure to point to the same location as cons_next.
+第二步是修改ring结构中 ring->cons_head，以指向cons_next相同的位置。
 
-The pointer to the dequeued object (obj1) is copied in the pointer given by the user.
+指向出队对象(obj1) 的指针被复制到用户指定的指针中。
 
 
 .. _figure_ring-dequeue2:
@@ -215,11 +212,11 @@ The pointer to the dequeued object (obj1) is copied in the pointer given by the 
    Dequeue second step
 
 
-Dequeue Last Step
-^^^^^^^^^^^^^^^^^
+出队最后一步
+^^^^^^^^^^^^^
 
-Finally, ring->cons_tail in the ring structure is modified to point to the same location as ring->cons_head.
-The dequeue operation is finished.
+最后，ring中的ring->cons_tail被修改为指向ring->cons_head相同的位置。
+出队操作完成。
 
 
 .. _figure_ring-dequeue3:
@@ -229,22 +226,21 @@ The dequeue operation is finished.
    Dequeue last step
 
 
-Multiple Producers Enqueue
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+多生产者入队
+~~~~~~~~~~~~~
 
-This section explains what occurs when two producers concurrently add an object to the ring.
-In this example, only the producer head and tail (prod_head and prod_tail) are modified.
+本节说明两个生产者同时向ring中添加对象的情况。
+在本例中，仅修改生产者头尾指针(prod_head and prod_tail)。
 
-The initial state is to have a prod_head and prod_tail pointing at the same location.
+初始状态是将prod_head 和 prod_tail 指向相同的位置。
 
-Multiple Producers Enqueue First Step
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+多生产者入队第一步
+^^^^^^^^^^^^^^^^^^^^^^
 
-On both cores, *ring->prod_head* and ring->cons_tail are copied in local variables.
-The prod_next local variable points to the next element of the table,
-or several elements after in the case of bulk enqueue.
+在生产者的两个core上， *ring->prod_head* 及 *ring->cons_tail* 都被复制到局部变量。
+局部变量prod_next指向下一个元素，或者在批量入队的情况下指向下几个元素。
 
-If there is not enough room in the ring (this is detected by checking cons_tail), it returns an error.
+如果ring中没有足够的空间用于入队(通过检查cons_tail)，将返回错误。
 
 
 .. _figure_ring-mp-enqueue1:
@@ -254,19 +250,17 @@ If there is not enough room in the ring (this is detected by checking cons_tail)
    Multiple producer enqueue first step
 
 
-Multiple Producers Enqueue Second Step
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+多生产者入队第二步
+^^^^^^^^^^^^^^^^^^^^^
 
-The second step is to modify ring->prod_head in the ring structure to point to the same location as prod_next.
-This operation is done using a Compare And Swap (CAS) instruction, which does the following operations atomically:
+第二步是修改ring结构中 ring->prod_head ，来指向prod_next相同的位置。
+此操作使用比较和交换(CAS)指令，该指令以原子操作的方式执行以下操作：
 
-*   If ring->prod_head is different to local variable prod_head,
-    the CAS operation fails, and the code restarts at first step.
+*   如果ring->prod_head 与本地变量prod_head不同，则CAS操作失败，代码将在第一步重新启动。
 
-*   Otherwise, ring->prod_head is set to local prod_next,
-    the CAS operation is successful, and processing continues.
+*   否则，ring->prod_head设置为本地变量prod_next，CAS操作成功并继续下一步处理。
 
-In the figure, the operation succeeded on core 1, and step one restarted on core 2.
+在图中，core1执行成功，core2重新启动。
 
 
 .. _figure_ring-mp-enqueue2:
@@ -276,12 +270,12 @@ In the figure, the operation succeeded on core 1, and step one restarted on core
    Multiple producer enqueue second step
 
 
-Multiple Producers Enqueue Third Step
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+多生产者入队第三步
+^^^^^^^^^^^^^^^^^^^^
 
-The CAS operation is retried on core 2 with success.
+Core 2的CAS操作成功重试。
 
-The core 1 updates one element of the ring(obj4), and the core 2 updates another one (obj5).
+Core 1更新一个对象(obj4)到ring上。Core 2更新一个对象(obj5)到ring上
 
 
 .. _figure_ring-mp-enqueue3:
@@ -291,12 +285,12 @@ The core 1 updates one element of the ring(obj4), and the core 2 updates another
    Multiple producer enqueue third step
 
 
-Multiple Producers Enqueue Fourth Step
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+多生产者入队地四步
+^^^^^^^^^^^^^^^^^^^^
 
-Each core now wants to update ring->prod_tail.
-A core can only update it if ring->prod_tail is equal to the prod_head local variable.
-This is only true on core 1. The operation is finished on core 1.
+每个core现在都想更新 ring->prod_tail。
+只有ring->prod_tail等于prod_head本地变量，core才能更新它。
+当前只有core 1满足，操作在core 1上完成。
 
 
 .. _figure_ring-mp-enqueue4:
@@ -306,11 +300,11 @@ This is only true on core 1. The operation is finished on core 1.
    Multiple producer enqueue fourth step
 
 
-Multiple Producers Enqueue Last Step
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+多生产者入队最后一步
+^^^^^^^^^^^^^^^^^^^^^^
 
-Once ring->prod_tail is updated by core 1, core 2 is allowed to update it too.
-The operation is also finished on core 2.
+一旦ring->prod_tail被core 1更新完，core 2也满足条件，允许更新。
+Core 2上也完成了操作。
 
 
 .. _figure_ring-mp-enqueue5:
@@ -320,22 +314,20 @@ The operation is also finished on core 2.
    Multiple producer enqueue last step
 
 
-Modulo 32-bit Indexes
-~~~~~~~~~~~~~~~~~~~~~
+32-bit取模索引
+~~~~~~~~~~~~~~~
 
-In the preceding figures, the prod_head, prod_tail, cons_head and cons_tail indexes are represented by arrows.
-In the actual implementation, these values are not between 0 and size(ring)-1 as would be assumed.
-The indexes are between 0 and 2^32 -1, and we mask their value when we access the pointer table (the ring itself).
-32-bit modulo also implies that operations on indexes (such as, add/subtract) will automatically do 2^32 modulo
-if the result overflows the 32-bit number range.
+在前面的途中，prod_head, prod_tail, cons_head 和 cons_tail索引由箭头表示。
+但是，在实际实现中，这些值不会假定在0和 size(ring)-1 之间。
+索引值在 0 ～ 2^32 -1之间，当我们访问ring本身时，我们屏蔽他们的值。
+32bit模数也意味着如果溢出32bit的范围，对索引的操作将自动执行2^32 模。
 
-The following are two examples that help to explain how indexes are used in a ring.
+以下是两个例子，用于帮助解释索引值如何在ring中使用。
 
 .. note::
 
-    To simplify the explanation, operations with modulo 16-bit are used instead of modulo 32-bit.
-    In addition, the four indexes are defined as unsigned 16-bit integers,
-    as opposed to unsigned 32-bit integers in the more realistic case.
+    为了简化说明，使用模16bit操作，而不是32bit。
+    另外，四个索引被定义为16bit无符号整数，与实际情况下的32bit无符号数相反。
 
 
 .. _figure_ring-modulo1:
@@ -345,7 +337,7 @@ The following are two examples that help to explain how indexes are used in a ri
    Modulo 32-bit indexes - Example 1
 
 
-This ring contains 11000 entries.
+这个ring包含11000对象。
 
 
 .. _figure_ring-modulo2:
@@ -355,26 +347,24 @@ This ring contains 11000 entries.
       Modulo 32-bit indexes - Example 2
 
 
-This ring contains 12536 entries.
+这个ring包含12536个对象。
 
 .. note::
 
-    For ease of understanding, we use modulo 65536 operations in the above examples.
-    In real execution cases, this is redundant for low efficiency, but is done automatically when the result overflows.
+    为了便于理解，我们在上面的例子中使用模65536操作。
+    在实际执行情况下，这种低效操作是多余的，但是，当溢出时会自动执行。
 
-The code always maintains a distance between producer and consumer between 0 and size(ring)-1.
-Thanks to this property, we can do subtractions between 2 index values in a modulo-32bit base:
-that's why the overflow of the indexes is not a problem.
+代码始终保证生产者和消费者之间的距离在0 ～ size(ring)-1之间。
+基于这个属性，我们可以对两个索引值做减法，而不用考虑溢出问题
 
-At any time, entries and free_entries are between 0 and size(ring)-1,
-even if only the first term of subtraction has overflowed:
+任何情况下，ring中的对象和空闲对象都在 0 ～ size(ring)-1之间，即便第一个减法操作已经溢出：
 
 .. code-block:: c
 
     uint32_t entries = (prod_tail - cons_head);
     uint32_t free_entries = (mask + cons_tail -prod_head);
 
-References
+参考文档
 ----------
 
     *   `bufring.h in FreeBSD <http://svn.freebsd.org/viewvc/base/release/8.0.0/sys/sys/buf_ring.h?revision=199625&amp;view=markup>`_ (version 8)

@@ -30,51 +30,48 @@
 
 .. _Mempool_Library:
 
-Mempool Library
-===============
+Mempool 库
+===========
 
-A memory pool is an allocator of a fixed-sized object.
-In the DPDK, it is identified by name and uses a mempool handler to store free objects.
-The default mempool handler is ring based.
-It provides some other optional services such as a per-core object cache and
-an alignment helper to ensure that objects are padded to spread them equally on all DRAM or DDR3 channels.
+内存池是固定大小的对象分配器。
+在DPDK中，它由名称唯一标识，并且使用mempool操作来存储空闲对象。
+默认的mempool操作是基于ring的。它提供了一些可选的服务，如per-core缓存和对齐帮助，以确保对象被填充，
+方便将他们均匀扩展到DRAM或DDR3通道上。
 
-This library is used by the :ref:`Mbuf Library <Mbuf_Library>`.
+这个库由 :ref:`Mbuf Library <Mbuf_Library>` 使用。
 
 Cookies
 -------
 
-In debug mode (CONFIG_RTE_LIBRTE_MEMPOOL_DEBUG is enabled), cookies are added at the beginning and end of allocated blocks.
-The allocated objects then contain overwrite protection fields to help debugging buffer overflows.
+在调试模式(CONFIG_RTE_LIBRTE_MEMPOOL_DEBUG is enabled)中，将在块的开头和结尾处添加cookies。
+分配的对象包含保护字段，以帮助调试缓冲区溢出。
 
 Stats
 -----
 
-In debug mode (CONFIG_RTE_LIBRTE_MEMPOOL_DEBUG is enabled),
-statistics about get from/put in the pool are stored in the mempool structure.
-Statistics are per-lcore to avoid concurrent access to statistics counters.
+在调试模式(CONFIG_RTE_LIBRTE_MEMPOOL_DEBUG is enabled)中，从池中获取/释放的统计信息存放在mempool结构体中。
+统计信息是per-lcore的，避免并发访问统计计数器。
 
-Memory Alignment Constraints
-----------------------------
+内存对齐约束
+--------------
 
-Depending on hardware memory configuration, performance can be greatly improved by adding a specific padding between objects.
-The objective is to ensure that the beginning of each object starts on a different channel and rank in memory so that all channels are equally loaded.
+根据硬件内存配置，可以通过在对象之间添加特定的填充来大大提高性能。
+其目的是确保每个对象开始于不同的通道上，并在内存中排列，以便实现所有通道负载均衡。
 
-This is particularly true for packet buffers when doing L3 forwarding or flow classification.
-Only the first 64 bytes are accessed, so performance can be increased by spreading the start addresses of objects among the different channels.
+特别是当进行L3转发或流分类时，报文缓冲对齐尤为重要。此时仅访问报文的前64B，因此可以通过在不同的信道之间扩展对象的起始地址来提升性能。
 
-The number of ranks on any DIMM is the number of independent sets of DRAMs that can be accessed for the full data bit-width of the DIMM.
-The ranks cannot be accessed simultaneously since they share the same data path.
-The physical layout of the DRAM chips on the DIMM itself does not necessarily relate to the number of ranks.
+DIMM上的rank数目是可访问DIMM完整数据位宽的独立DIMM集合的数量。
+由于他们共享相同的路径，因此rank不能被同事访问。
+DIMM上的DRAM芯片的物理布局无需与rank数目相关。
 
-When running an application, the EAL command line options provide the ability to add the number of memory channels and ranks.
+当运行app时，EAL命令行选项提供了添加内存通道和rank数目的能力。
 
 .. note::
 
-    The command line must always have the number of memory channels specified for the processor.
+    命令行必须始终指定处理器的内存通道数目。
 
-Examples of alignment for different DIMM architectures are shown in
-:numref:`figure_memory-management` and :numref:`figure_memory-management2`.
+不同DIMM架构的对齐示例如图所示
+:numref:`figure_memory-management` 及 :numref:`figure_memory-management2` 。
 
 .. _figure_memory-management:
 
@@ -83,10 +80,9 @@ Examples of alignment for different DIMM architectures are shown in
    Two Channels and Quad-ranked DIMM Example
 
 
-In this case, the assumption is that a packet is 16 blocks of 64 bytes, which is not true.
+在这种情况下，假设吧平稳是64B块就不成立了。
 
-The Intel® 5520 chipset has three channels, so in most cases,
-no padding is required between objects (except for objects whose size are n x 3 x 64 bytes blocks).
+Intel® 5520芯片组有三个通道，因此，在大多数情况下，对象之间不需要填充。(除了大小为n x 3 x 64B的块)
 
 .. _figure_memory-management2:
 
@@ -95,31 +91,25 @@ no padding is required between objects (except for objects whose size are n x 3 
    Three Channels and Two Dual-ranked DIMM Example
 
 
-When creating a new pool, the user can specify to use this feature or not.
+当创建一个新池时，用户可以指定使用此功能。
 
 .. _mempool_local_cache:
 
-Local Cache
+本地缓存
 -----------
 
-In terms of CPU usage, the cost of multiple cores accessing a memory pool's ring of free buffers may be high
-since each access requires a compare-and-set (CAS) operation.
-To avoid having too many access requests to the memory pool's ring,
-the memory pool allocator can maintain a per-core cache and do bulk requests to the memory pool's ring,
-via the cache with many fewer locks on the actual memory pool structure.
-In this way, each core has full access to its own cache (with locks) of free objects and
-only when the cache fills does the core need to shuffle some of the free objects back to the pools ring or
-obtain more objects when the cache is empty.
+在CPU使用率方面，由于每个访问需要compare-and-set (CAS)操作，所以多核访问内存池的空闲缓冲区成本比较高。
+为了避免对内存池ring的访问请求太多，内存池分配器可以维护per-core cache，并通过实际内存池中具有较少锁定的缓存对内存池ring执行批量请求。
+通过这种方式，每个core都可以访问自己空闲对象的缓存（带锁），
+只有当缓存填充时，内核才需要将某些空闲对象重新放回到缓冲池ring，或者当缓存空时，从缓冲池中获取更多对象。
 
-While this may mean a number of buffers may sit idle on some core's cache,
-the speed at which a core can access its own cache for a specific memory pool without locks provides performance gains.
+虽然这意味着一些buffer可能在某些core的缓存上处于空闲状态，但是core可以无锁访问其自己的缓存提供了性能上的提升。
 
-The cache is composed of a small, per-core table of pointers and its length (used as a stack).
-This internal cache can be enabled or disabled at creation of the pool.
+缓存由一个小型的per-core表及其长度组成。可以在创建池时启用/禁用此缓存。
 
-The maximum size of the cache is static and is defined at compilation time (CONFIG_RTE_MEMPOOL_CACHE_MAX_SIZE).
+缓存大小的最大值是静态配置，并在编译时定义的(CONFIG_RTE_MEMPOOL_CACHE_MAX_SIZE)。
 
-:numref:`figure_mempool` shows a cache in operation.
+:numref:`figure_mempool` 显示了一个缓存操作。
 
 .. _figure_mempool:
 
@@ -127,48 +117,39 @@ The maximum size of the cache is static and is defined at compilation time (CONF
 
    A mempool in Memory with its Associated Ring
 
-Alternatively to the internal default per-lcore local cache, an application can create and manage external caches through the ``rte_mempool_cache_create()``, ``rte_mempool_cache_free()`` and ``rte_mempool_cache_flush()`` calls.
-These user-owned caches can be explicitly passed to ``rte_mempool_generic_put()`` and ``rte_mempool_generic_get()``.
-The ``rte_mempool_default_cache()`` call returns the default internal cache if any.
-In contrast to the default caches, user-owned caches can be used by non-EAL threads too.
+不同于per-lcore内部缓存，应用程序可以通过接口 ``rte_mempool_cache_create()`` ， ``rte_mempool_cache_free()`` 和 ``rte_mempool_cache_flush()`` 创建和管理外部缓存。
+这些用户拥有的缓存可以被显式传递给 ``rte_mempool_generic_put()`` 和 ``rte_mempool_generic_get()`` 。
+接口 ``rte_mempool_default_cache()`` 返回默认内部缓存。
+与默认缓存相反，用户拥有的高速缓存可以由非EAL线程使用。
 
-Mempool Handlers
-------------------------
+Mempool 句柄
+---------------
 
-This allows external memory subsystems, such as external hardware memory
-management systems and software based memory allocators, to be used with DPDK.
+这允许外部存储子系统，如外部硬件存储管理系统和软件存储管理与DPDK一起使用。
 
-There are two aspects to a mempool handler.
+mempool 操作包括两方面：
 
-* Adding the code for your new mempool operations (ops). This is achieved by
-  adding a new mempool ops code, and using the ``MEMPOOL_REGISTER_OPS`` macro.
+* 添加新的mempool操作代码。这是通过添加mempool ops代码，并使用 ``MEMPOOL_REGISTER_OPS`` 宏来实现的。
 
-* Using the new API to call ``rte_mempool_create_empty()`` and
-  ``rte_mempool_set_ops_byname()`` to create a new mempool and specifying which
-  ops to use.
+* 使用新的API调用 ``rte_mempool_create_empty()`` 及 ``rte_mempool_set_ops_byname()`` 用于创建新的mempool，并制定用户要使用的操作。
 
-Several different mempool handlers may be used in the same application. A new
-mempool can be created by using the ``rte_mempool_create_empty()`` function,
-then using ``rte_mempool_set_ops_byname()`` to point the mempool to the
-relevant mempool handler callback (ops) structure.
+在同一个应用程序中可能会使用几个不同的mempool处理。
+可以使用 ``rte_mempool_create_empty()`` 创建一个新的mempool，然后用 ``rte_mempool_set_ops_byname()`` 将mempool指向相关的 mempool处理回调（ops）结构体。
 
-Legacy applications may continue to use the old ``rte_mempool_create()`` API
-call, which uses a ring based mempool handler by default. These applications
-will need to be modified to use a new mempool handler.
+传统的应用程序可能会继续使用旧的 ``rte_mempool_create()`` API调用，它默认使用基于ring的mempool处理。
+这些应用程序需要修改为新的mempool处理。
 
-For applications that use ``rte_pktmbuf_create()``, there is a config setting
-(``RTE_MBUF_DEFAULT_MEMPOOL_OPS``) that allows the application to make use of
-an alternative mempool handler.
+对于使用 ``rte_pktmbuf_create()`` 的应用程序，有一个配置设置(``RTE_MBUF_DEFAULT_MEMPOOL_OPS``)，允许应用程序使用另一个mempool处理。
 
 
-Use Cases
----------
+用例
+-------
 
-All allocations that require a high level of performance should use a pool-based memory allocator.
-Below are some examples:
+需要高性能的所有分配器应该使用内存池实现。
+以下是一些使用实例：
 
 *   :ref:`Mbuf Library <Mbuf_Library>`
 
-*   :ref:`Environment Abstraction Layer <Environment_Abstraction_Layer>` , for logging service
+*   :ref:`Environment Abstraction Layer <Environment_Abstraction_Layer>` 
 
-*   Any application that needs to allocate fixed-sized objects in the data plane and that will be continuously utilized by the system.
+*   任何需要在程序中分配固定大小对象，并将被系统持续使用的应用程序

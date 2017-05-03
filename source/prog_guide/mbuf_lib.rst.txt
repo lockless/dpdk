@@ -30,39 +30,48 @@
 
 .. _Mbuf_Library:
 
-Mbuf 库
-========
+Mbuf Library
+============
 
-Mbuf库提供了申请和释放mbufs的功能，DPDK应用程序使用这些buffer存储消息缓冲。
-消息缓冲存储在mempool中，使用 :ref:`Mempool Library <Mempool_Library>` 。
+The mbuf library provides the ability to allocate and free buffers (mbufs)
+that may be used by the DPDK application to store message buffers.
+The message buffers are stored in a mempool, using the :ref:`Mempool Library <Mempool_Library>`.
 
-数据结构rte_mbuf可以承载网络数据包buffer或者通用控制消息buffer(由CTRL_MBUF_FLAG指示)。
-也可以扩展到其他类型。
-rte_mbuf头部结构尽可能小，目前只使用两个缓存行，最常用的字段位于第一个缓存行中。
+A rte_mbuf struct can carry network packet buffers
+or generic control buffers (indicated by the CTRL_MBUF_FLAG).
+This can be extended to other types.
+The rte_mbuf header structure is kept as small as possible and currently uses
+just two cache lines, with the most frequently used fields being on the first
+of the two cache lines.
 
-Packet Buffer 设计
---------------------
+Design of Packet Buffers
+------------------------
 
-为了存储数据包数据(报价协议头部), 考虑了两种方法：
+For the storage of the packet data (including protocol headers), two approaches were considered:
 
-#.  在单个存储buffer中嵌入metadata，后面跟着数据包数据固定大小区域
+#.  Embed metadata within a single memory buffer the structure followed by a fixed size area for the packet data.
 
-#.  为metadata和报文数据分别使用独立的存储buffer。
+#.  Use separate memory buffers for the metadata structure and for the packet data.
 
-第一种方法的优点是他只需要一个操作来分配/释放数据包的整个存储表示。
-但是，第二种方法更加灵活，并允许将元数据的分配与报文数据缓冲区的分配完全分离。
+The advantage of the first method is that it only needs one operation to allocate/free the whole memory representation of a packet.
+On the other hand, the second method is more flexible and allows
+the complete separation of the allocation of metadata structures from the allocation of packet data buffers.
 
-DPDK选择了第一种方法。
-Metadata包含诸如消息类型，长度，到数据开头的偏移量等控制信息，以及允许缓冲链接的附加mbuf结构指针。
+The first method was chosen for the DPDK.
+The metadata contains control information such as message type, length,
+offset to the start of the data and a pointer for additional mbuf structures allowing buffer chaining.
 
-用于承载网络数据包buffer的消息缓冲可以处理需要多个缓冲区来保存完整数据包的情况。
-许多通过下一个字段链接在一起的mbuf组成的jumbo帧，就是这种情况。
+Message buffers that are used to carry network packets can handle buffer chaining
+where multiple buffers are required to hold the complete packet.
+This is the case for jumbo frames that are composed of many mbufs linked together through their next field.
 
-对于新分配的mbuf，数据开始的区域是buffer之后 RTE_PKTMBUF_HEADROOM 字节的位置，这是缓存对齐的。
-Message buffers可以在系统中的不同实体中携带控制信息，报文，事件等。
-Message buffers也可以使用起buffer指针来指向其他消息缓冲的数据字段或其他数据结构。
+For a newly allocated mbuf, the area at which the data begins in the message buffer is
+RTE_PKTMBUF_HEADROOM bytes after the beginning of the buffer, which is cache aligned.
+Message buffers may be used to carry control information, packets, events,
+and so on between different entities in the system.
+Message buffers may also use their buffer pointers to point to other message buffer data sections or other structures.
 
-:numref:`figure_mbuf1` and :numref:`figure_mbuf2` 显示了其中个一些场景。
+:numref:`figure_mbuf1` and :numref:`figure_mbuf2` show some of these scenarios.
 
 .. _figure_mbuf1:
 
@@ -78,35 +87,36 @@ Message buffers也可以使用起buffer指针来指向其他消息缓冲的数�
    An mbuf with Three Segments
 
 
-Buffer Manager实现了一组相当标准的buffer访问操作来操纵网络数据包。
+The Buffer Manager implements a fairly standard set of buffer access functions to manipulate network packets.
 
-存储在Mempool中的Buffer
--------------------------
+Buffers Stored in Memory Pools
+------------------------------
 
-Buffer Manager 使用 :ref:`Mempool Library <Mempool_Library>` 来申请buffer。
-因此确保了数据包头部均衡分布到信道上并进行L3处理。
-mbuf中包含一个字段，用于表示它从哪个池中申请出来。
-当调用 rte_ctrlmbuf_free(m) 或 rte_pktmbuf_free(m)，mbuf被释放到原来的池中。
+The Buffer Manager uses the :ref:`Mempool Library <Mempool_Library>` to allocate buffers.
+Therefore, it ensures that the packet header is interleaved optimally across the channels and ranks for L3 processing.
+An mbuf contains a field indicating the pool that it originated from.
+When calling rte_ctrlmbuf_free(m) or rte_pktmbuf_free(m), the mbuf returns to its original pool.
 
-构造函数
+Constructors
 ------------
 
-Packet 及 control mbuf构造函数由API提供。
-接口rte_pktmbuf_init() 及 rte_ctrlmbuf_init() 初始化mbuf结构中的某些字段，这些字段一旦创建将不会被用户修改（如mbuf类型、源池、缓冲区起始地址等）。
-此函数在池创建时作为rte_mempool_create()函数的回掉函数给出。
+Packet and control mbuf constructors are provided by the API.
+The rte_pktmbuf_init() and rte_ctrlmbuf_init() functions initialize some fields in the mbuf structure that
+are not modified by the user once created (mbuf type, origin pool, buffer start address, and so on).
+This function is given as a callback function to the rte_mempool_create() function at pool creation time.
 
-申请及释放 mbufs
-------------------
+Allocating and Freeing mbufs
+----------------------------
 
-分配一个新mbuf需要用户指定从哪个池中申请。
-对于任意新分配的mbuf，它包含一个段，长度为0。
-缓冲区到数据的偏移量被初始化，以便使得buffer具有一些字节（RTE_PKTMBUF_HEADROOM）的headroom。
+Allocating a new mbuf requires the user to specify the mempool from which the mbuf should be taken.
+For any newly-allocated mbuf, it contains one segment, with a length of 0.
+The offset to data is initialized to have some bytes of headroom in the buffer (RTE_PKTMBUF_HEADROOM).
 
-释放mbuf意味着将其返回到原始的mempool。
-当mbuf的内容存储在一个池中（作为一个空闲的mbuf）时，mbuf的内容不会被修改。
-由构造函数初始化的字段不需要在mbuf分配时重新初始化。
+Freeing a mbuf means returning it into its original mempool.
+The content of an mbuf is not modified when it is stored in a pool (as a free mbuf).
+Fields initialized by the constructor do not need to be re-initialized at mbuf allocation.
 
-当释放包含多个段的数据包mbuf时，他们都被释放，并返回到原始mempool。
+When freeing a packet mbuf that contains several segments, all of them are freed and returned to their original mempool.
 
 Manipulating mbufs
 ------------------

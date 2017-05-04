@@ -108,56 +108,47 @@ Packet 及 control mbuf构造函数由API提供。
 
 当释放包含多个段的数据包mbuf时，他们都被释放，并返回到原始mempool。
 
-Manipulating mbufs
-------------------
+操作 mbufs 
+------------
 
-This library provides some functions for manipulating the data in a packet mbuf. For instance:
+这个库提供了一些操作数据包mbuf中的数据的功能。 例如：
 
-    *  Get data length
+    *  获取数据长度
 
-    *  Get a pointer to the start of data
+    *  获取指向数据开始位置的指针
 
-    *  Prepend data before data
+    *  数据前插入数据
 
-    *   Append data after data
+    *  数据之后添加数据
 
-    *   Remove data at the beginning of the buffer (rte_pktmbuf_adj())
+    *  删除缓冲区开头的数据(rte_pktmbuf_adj())
 
-    *   Remove data at the end of the buffer (rte_pktmbuf_trim()) Refer to the *DPDK API Reference* for details.
+    *  删除缓冲区末尾的数据(rte_pktmbuf_trim()) 详细信息请参阅 *DPDK API Reference* 
 
-Meta Information
-----------------
+元数据信息
+-------------
 
-Some information is retrieved by the network driver and stored in an mbuf to make processing easier.
-For instance, the VLAN, the RSS hash result (see :ref:`Poll Mode Driver <Poll_Mode_Driver>`)
-and a flag indicating that the checksum was computed by hardware.
+部分信息由网络驱动程序检索并存储在mbuf中使得处理更简单。
+例如，VLAN、RSS哈希结果(参见 :ref:`Poll Mode Driver <Poll_Mode_Driver>`)及校验和由硬件计算的标志等。
 
-An mbuf also contains the input port (where it comes from), and the number of segment mbufs in the chain.
+mbuf中还包含数据源端口和报文链中mbuf数目。
+对于链接的mbuf，只有链的第一个mbuf存储这个元信息。
 
-For chained buffers, only the first mbuf of the chain stores this meta information.
+例如，对于IEEE1588数据包，RX侧就是这种情况，时间戳机制，VLAN标记和IP校验和计算。
+在TX端，应用程序还可以将一些处理委托给硬件。 例如，PKT_TX_IP_CKSUM标志允许卸载IPv4校验和的计算。
 
-For instance, this is the case on RX side for the IEEE1588 packet
-timestamp mechanism, the VLAN tagging and the IP checksum computation.
+以下示例说明如何在vxlan封装的tcp数据包上配置不同的TX卸载：``out_eth/out_ip/out_udp/vxlan/in_eth/in_ip/in_tcp/payload``
 
-On TX side, it is also possible for an application to delegate some
-processing to the hardware if it supports it. For instance, the
-PKT_TX_IP_CKSUM flag allows to offload the computation of the IPv4
-checksum.
-
-The following examples explain how to configure different TX offloads on
-a vxlan-encapsulated tcp packet:
-``out_eth/out_ip/out_udp/vxlan/in_eth/in_ip/in_tcp/payload``
-
-- calculate checksum of out_ip::
+- 计算out_ip的校验和::
 
     mb->l2_len = len(out_eth)
     mb->l3_len = len(out_ip)
     mb->ol_flags |= PKT_TX_IPV4 | PKT_TX_IP_CSUM
     set out_ip checksum to 0 in the packet
 
-  This is supported on hardware advertising DEV_TX_OFFLOAD_IPV4_CKSUM.
+  配置DEV_TX_OFFLOAD_IPV4_CKSUM支持在硬件计算。
 
-- calculate checksum of out_ip and out_udp::
+- 计算out_ip 和 out_udp的校验和::
 
     mb->l2_len = len(out_eth)
     mb->l3_len = len(out_ip)
@@ -165,106 +156,92 @@ a vxlan-encapsulated tcp packet:
     set out_ip checksum to 0 in the packet
     set out_udp checksum to pseudo header using rte_ipv4_phdr_cksum()
 
-  This is supported on hardware advertising DEV_TX_OFFLOAD_IPV4_CKSUM
-  and DEV_TX_OFFLOAD_UDP_CKSUM.
+  配置DEV_TX_OFFLOAD_IPV4_CKSUM 和 DEV_TX_OFFLOAD_UDP_CKSUM支持在硬件上计算。
 
-- calculate checksum of in_ip::
+- 计算in_ip的校验和::
 
     mb->l2_len = len(out_eth + out_ip + out_udp + vxlan + in_eth)
     mb->l3_len = len(in_ip)
     mb->ol_flags |= PKT_TX_IPV4 | PKT_TX_IP_CSUM
     set in_ip checksum to 0 in the packet
 
-  This is similar to case 1), but l2_len is different. It is supported
-  on hardware advertising DEV_TX_OFFLOAD_IPV4_CKSUM.
-  Note that it can only work if outer L4 checksum is 0.
+  这以情况1类似，但是l2_len不同。
+  配置DEV_TX_OFFLOAD_IPV4_CKSUM支持硬件计算。
+  注意，只有外部L4校验和为0时才可以工作。
 
-- calculate checksum of in_ip and in_tcp::
+- 计算in_ip 和 in_tcp的校验和::
 
     mb->l2_len = len(out_eth + out_ip + out_udp + vxlan + in_eth)
     mb->l3_len = len(in_ip)
     mb->ol_flags |= PKT_TX_IPV4 | PKT_TX_IP_CSUM | PKT_TX_TCP_CKSUM
-    set in_ip checksum to 0 in the packet
-    set in_tcp checksum to pseudo header using rte_ipv4_phdr_cksum()
+    在报文中设置in_ip校验和为0
+    使用rte_ipv4_phdr_cksum()将in_tcp校验和设置为伪头
 
-  This is similar to case 2), but l2_len is different. It is supported
-  on hardware advertising DEV_TX_OFFLOAD_IPV4_CKSUM and
-  DEV_TX_OFFLOAD_TCP_CKSUM.
-  Note that it can only work if outer L4 checksum is 0.
+  这与情况2类似，但是l2_len不同。
+  配置DEV_TX_OFFLOAD_IPV4_CKSUM 和 DEV_TX_OFFLOAD_TCP_CKSUM支持硬件实现。
+  注意，只有外部L4校验和为0才能工作。
 
 - segment inner TCP::
 
     mb->l2_len = len(out_eth + out_ip + out_udp + vxlan + in_eth)
     mb->l3_len = len(in_ip)
     mb->l4_len = len(in_tcp)
-    mb->ol_flags |= PKT_TX_IPV4 | PKT_TX_IP_CKSUM | PKT_TX_TCP_CKSUM |
-      PKT_TX_TCP_SEG;
-    set in_ip checksum to 0 in the packet
-    set in_tcp checksum to pseudo header without including the IP
-      payload length using rte_ipv4_phdr_cksum()
+    mb->ol_flags |= PKT_TX_IPV4 | PKT_TX_IP_CKSUM | PKT_TX_TCP_CKSUM | PKT_TX_TCP_SEG;
+    在报文中设置in_ip校验和为0
+    将in_tcp校验和设置为伪头部，而不使用IP载荷长度
 
-  This is supported on hardware advertising DEV_TX_OFFLOAD_TCP_TSO.
-  Note that it can only work if outer L4 checksum is 0.
+  配置DEV_TX_OFFLOAD_TCP_TSO支持硬件实现。
+  注意，只有L4校验和为0时才能工作。
 
-- calculate checksum of out_ip, in_ip, in_tcp::
+- 计算out_ip, in_ip, in_tcp的校验和::
 
     mb->outer_l2_len = len(out_eth)
     mb->outer_l3_len = len(out_ip)
     mb->l2_len = len(out_udp + vxlan + in_eth)
     mb->l3_len = len(in_ip)
-    mb->ol_flags |= PKT_TX_OUTER_IPV4 | PKT_TX_OUTER_IP_CKSUM  | \
-      PKT_TX_IP_CKSUM |  PKT_TX_TCP_CKSUM;
-    set out_ip checksum to 0 in the packet
-    set in_ip checksum to 0 in the packet
-    set in_tcp checksum to pseudo header using rte_ipv4_phdr_cksum()
+    mb->ol_flags |= PKT_TX_OUTER_IPV4 | PKT_TX_OUTER_IP_CKSUM  | PKT_TX_IP_CKSUM |  PKT_TX_TCP_CKSUM;
+    设置 out_ip 校验和为0
+    设置 in_ip 校验和为0
+    使用rte_ipv4_phdr_cksum()设置in_tcp校验和为伪头部
 
-  This is supported on hardware advertising DEV_TX_OFFLOAD_IPV4_CKSUM,
-  DEV_TX_OFFLOAD_UDP_CKSUM and DEV_TX_OFFLOAD_OUTER_IPV4_CKSUM.
+  配置DEV_TX_OFFLOAD_IPV4_CKSUM, DEV_TX_OFFLOAD_UDP_CKSUM 和 DEV_TX_OFFLOAD_OUTER_IPV4_CKSUM支持硬件实现。
 
-The list of flags and their precise meaning is described in the mbuf API
-documentation (rte_mbuf.h). Also refer to the testpmd source code
-(specifically the csumonly.c file) for details.
+Flage标记的意义在mbuf API文档(rte_mbuf.h)中有详细描述。
+更多详细信息还可以参阅testpmd 源码(特别是csumonly.c)。
 
 .. _direct_indirect_buffer:
 
-Direct and Indirect Buffers
----------------------------
+直接及间接 Buffers 
+--------------------
 
-A direct buffer is a buffer that is completely separate and self-contained.
-An indirect buffer behaves like a direct buffer but for the fact that the buffer pointer and
-data offset in it refer to data in another direct buffer.
-This is useful in situations where packets need to be duplicated or fragmented,
-since indirect buffers provide the means to reuse the same packet data across multiple buffers.
+直接缓冲区是指缓冲区完全独立。
+间接缓冲区的行为类似于直接缓冲区，但缓冲区的指针和数据便宜量指的是另一个直接缓冲区的数据。
+这在数据包需要复制或分段的情况下是很有用的，因为间接缓冲区提供跨越多个缓冲区重用相同数据包数据的手段。
 
-A buffer becomes indirect when it is "attached" to a direct buffer using the rte_pktmbuf_attach() function.
-Each buffer has a reference counter field and whenever an indirect buffer is attached to the direct buffer,
-the reference counter on the direct buffer is incremented.
-Similarly, whenever the indirect buffer is detached, the reference counter on the direct buffer is decremented.
-If the resulting reference counter is equal to 0, the direct buffer is freed since it is no longer in use.
+当使用接口 ``rte_pktmbuf_attach()`` 函数将缓冲区附加到直接缓冲区时，该缓冲区变成间接缓冲区。
+每个缓冲区有一个引用计数器字段，每当直接缓冲区附加一个间接缓冲区时，直接缓冲区上的应用计数器递增。
+类似的，每当间接缓冲区被分裂时，直接缓冲区上的引用计数器递减。
+如果生成的引用计数器为0，则直接缓冲区将被释放，因为它不再使用。
 
-There are a few things to remember when dealing with indirect buffers.
-First of all, an indirect buffer is never attached to another indirect buffer.
-Attempting to attach buffer A to indirect buffer B that is attached to C, makes rte_pktmbuf_attach() automatically attach A to C, effectively cloning B.
-Secondly, for a buffer to become indirect, its reference counter must be equal to 1,
-that is, it must not be already referenced by another indirect buffer.
-Finally, it is not possible to reattach an indirect buffer to the direct buffer (unless it is detached first).
+处理间接缓冲区时需要注意几件事情。
+首先，间接缓冲区从不附加到另一个间接缓冲区。
+尝试将缓冲区A附加到间接缓冲区B（且B附加到C上了），将使得rte_pktmbuf_attach() 自动将A附加到C上。
+其次，为了使缓冲区变成间接缓冲区，其引用计数必须等于1，也就是说它不能被另一个间接缓冲区引用。
+最后，不可能将间接缓冲区重新链接到直接缓冲区（除非它已经被分离了）。
 
-While the attach/detach operations can be invoked directly using the recommended rte_pktmbuf_attach() and rte_pktmbuf_detach() functions,
-it is suggested to use the higher-level rte_pktmbuf_clone() function,
-which takes care of the correct initialization of an indirect buffer and can clone buffers with multiple segments.
+虽然可以使用推荐的rte_pktmbuf_attach（）和rte_pktmbuf_detach（）函数直接调用附加/分离操作，
+但建议使用更高级的rte_pktmbuf_clone（）函数，该函数负责间接缓冲区的正确初始化，并可以克隆具有多个段的缓冲区。
 
-Since indirect buffers are not supposed to actually hold any data,
-the memory pool for indirect buffers should be configured to indicate the reduced memory consumption.
-Examples of the initialization of a memory pool for indirect buffers (as well as use case examples for indirect buffers)
-can be found in several of the sample applications, for example, the IPv4 Multicast sample application.
+由于间接缓冲区不应该实际保存任何数据，间接缓冲区的内存池应配置为指示减少的内存消耗。
+可以在几个示例应用程序中找到用于间接缓冲区的内存池（以及间接缓冲区的用例示例）的初始化示例，例如IPv4组播示例应用程序。
 
-Debug
+
+调试
 -----
 
-In debug mode (CONFIG_RTE_MBUF_DEBUG is enabled),
-the functions of the mbuf library perform sanity checks before any operation (such as, buffer corruption, bad type, and so on).
+在调试模式 (CONFIG_RTE_MBUF_DEBUG使能)下，mbuf库的功能在任何操作之前执行完整性检查(如缓冲区检查、类型错误等)。
 
-Use Cases
----------
+用例
+------
 
-All networking application should use mbufs to transport network packets.
+所有网络应用程序都应该使用mbufs来传输网络数据包。

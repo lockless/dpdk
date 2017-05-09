@@ -30,18 +30,21 @@
 
 .. _Poll_Mode_Driver:
 
-轮询模式驱动
+Poll Mode Driver
 ================
 
-DPDK包括Gigabit、10Gigabit 及 40Gigabit 和半虚拟化IO的轮询模式驱动程序。
+The DPDK includes 1 Gigabit, 10 Gigabit and 40 Gigabit and para virtualized virtio Poll Mode Drivers.
 
-轮询模式驱动程序(PMD)由通过在用户空间中运行的BSD驱动提供的API组成，以配置设备及各自的队列。
+A Poll Mode Driver (PMD) consists of APIs, provided through the BSD driver running in user space,
+to configure the devices and their respective queues.
+In addition, a PMD accesses the RX and TX descriptors directly without any interrupts
+(with the exception of Link Status Change interrupts) to quickly receive,
+process and deliver packets in the user's application.
+This section describes the requirements of the PMDs,
+their global design principles and proposes a high-level architecture and a generic external API for the Ethernet PMDs.
 
-此外，PMD直接访问 RX 和 TX 描述符，且不会有任何中断（链路状态更改中断除外）产生，这可以保证在用户空间应用程序中快速接收，处理和传送数据包。
-本节介绍PMD的要求、设计原则和高级架构，并介绍了以太网PMD的对外通用API。
-
-要求及假设条件
------------------
+Requirements and Assumptions
+----------------------------
 
 The DPDK environment for packet processing applications allows for two models, run-to-completion and pipe-line:
 
@@ -91,8 +94,8 @@ channels and ranks.
 The application must ensure that appropriate parameters are given at memory pool creation time.
 See :ref:`Mempool Library <Mempool_Library>`.
 
-设计原则
------------
+Design Principles
+-----------------
 
 The API and architecture of the Ethernet* PMDs are designed with the following guidelines in mind.
 
@@ -130,8 +133,8 @@ This applies in particular to buffer allocators used to populate NIC rings, whic
 For example, an mbuf_multiple_alloc function returning an array of pointers to rte_mbuf buffers which speeds up the receive poll function of the PMD when
 replenishing multiple descriptors of the receive ring.
 
-逻辑核、内存及网卡队列的联系
-------------------------------
+Logical Cores, Memory and NIC Queues Relationships
+--------------------------------------------------
 
 The DPDK supports NUMA allowing for better performance when a processor's logical cores and interfaces utilize its local memory.
 Therefore, mbuf allocation associated with local PCIe* interfaces should be allocated from memory pools created in the local memory.
@@ -143,11 +146,11 @@ This is also true for the pipe-line model provided all logical cores used are lo
 
 Multiple logical cores should never share receive or transmit queues for interfaces since this would require global locks and hinder performance.
 
-设备标识及配置
-----------------
+Device Identification and Configuration
+---------------------------------------
 
-设备标识
-~~~~~~~~~~~
+Device Identification
+~~~~~~~~~~~~~~~~~~~~~
 
 Each NIC port is uniquely designated by its (bus/bridge, device, function) PCI
 identifiers assigned by the PCI probing/enumeration function executed at DPDK initialization.
@@ -158,8 +161,8 @@ Based on their PCI identifier, NIC ports are assigned two other identifiers:
 *   A port name used to designate the port in console messages, for administration or debugging purposes.
     For ease of use, the port name includes the port index.
 
-设备配置
-~~~~~~~~~~
+Device Configuration
+~~~~~~~~~~~~~~~~~~~~
 
 The configuration of each NIC port includes the following operations:
 
@@ -197,8 +200,8 @@ Ethernet* flow control (pause frame) can be configured on the individual port.
 Refer to the testpmd source code for details.
 Also, L4 (UDP/TCP/ SCTP) checksum offload by the NIC can be enabled for an individual packet as long as the packet mbuf is set up correctly. See `Hardware Offload`_ for details.
 
-传输队列配置
-~~~~~~~~~~~~~~
+Configuration of Transmit Queues
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Each transmit queue is independently configured with the following information:
 
@@ -246,8 +249,8 @@ One descriptor in the TX ring is used as a sentinel to avoid a hardware race con
 
     When configuring for DCB operation, at port initialization, both the number of transmit queues and the number of receive queues must be set to 128.
 
-释放 Tx 缓存
-~~~~~~~~~~~~~~
+Free Tx mbuf on Demand
+~~~~~~~~~~~~~~~~~~~~~~
 
 Many of the drivers do not release the mbuf back to the mempool, or local cache,
 immediately after the packet has been transmitted.
@@ -282,8 +285,8 @@ There are two scenarios when an application may want the mbuf released immediate
 To determine if a driver supports this API, check for the *Free Tx mbuf on demand* feature
 in the *Network Interface Controller Drivers* document.
 
-硬件卸载
-~~~~~~~~~~
+Hardware Offload
+~~~~~~~~~~~~~~~~
 
 Depending on driver capabilities advertised by
 ``rte_eth_dev_info_get()``, the PMD may support hardware offloading

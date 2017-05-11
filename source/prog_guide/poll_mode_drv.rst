@@ -43,53 +43,46 @@ DPDK包括Gigabit、10Gigabit 及 40Gigabit 和半虚拟化IO的轮询模式驱�
 要求及假设条件
 -----------------
 
-The DPDK environment for packet processing applications allows for two models, run-to-completion and pipe-line:
+DPDK环境支持两种模式的数据包处理，RTC和pipeline：
 
-*   In the *run-to-completion*  model, a specific port's RX descriptor ring is polled for packets through an API.
-    Packets are then processed on the same core and placed on a port's TX descriptor ring through an API for transmission.
+*   在 *run-to-completion*  模式中，通过调用API来轮询指定端口的RX描述符以获取报文。
+    紧接着，在同一个core上处理报文，并通过API调用将报文放到接口的TX描述符中以发送报文。
 
-*   In the *pipe-line*  model, one core polls one or more port's RX descriptor ring through an API.
-    Packets are received and passed to another core via a ring.
-    The other core continues to process the packet which then may be placed on a port's TX descriptor ring through an API for transmission.
+*   在 *pipe-line*  模式中，一个core轮询一个或多个接口的RX描述符以获取报文。然后报文经由ring被其他core处理。
+    其他core可以继续处理报文，最终报文被放到TX描述符中以发送出去。
 
-In a synchronous run-to-completion model,
-each logical core assigned to the DPDK executes a packet processing loop that includes the following steps:
+在同步 run-to-completion 模式中，每个逻辑和处理数据包的流程包括以下步骤：
 
-*   Retrieve input packets through the PMD receive API
+*   通过PMD报文接收API来获取报文
 
-*   Process each received packet one at a time, up to its forwarding
+*   一次性处理每个数据报文，直到转发阶段
 
-*   Send pending output packets through the PMD transmit API
+*   通过PMD发包API将报文发送出去
 
-Conversely, in an asynchronous pipe-line model, some logical cores may be dedicated to the retrieval of received packets and
-other logical cores to the processing of previously received packets.
-Received packets are exchanged between logical cores through rings.
-The loop for packet retrieval includes the following steps:
+相反地，在异步的pipline模式中，一些逻辑核可能专门用于接收报文，其他逻辑核用于处理前面收到的报文。
+收到的数据包通过报文ring在逻辑核之间交换。
+数据包收包过程包括以下步骤：
 
-*   Retrieve input packets through the PMD receive API
+*   通过PMD收包API获取报文
 
-*   Provide received packets to processing lcores through packet queues
+*   通过数据包队列想逻辑核提供接收到的数据包
 
-The loop for packet processing includes the following steps:
+数据包处理过程包括以下步骤：
 
-*   Retrieve the received packet from the packet queue
+*   从数据包队列中获取数据包
 
-*   Process the received packet, up to its retransmission if forwarded
+*   处理接收到的数据包，直到重新发送出去
 
-To avoid any unnecessary interrupt processing overhead, the execution environment must not use any asynchronous notification mechanisms.
-Whenever needed and appropriate, asynchronous communication should be introduced as much as possible through the use of rings.
+为了避免任何不必要的中断处理开销，执行环境不得使用任何异步通知机制。即便有需要，也应该尽量使用ring来引入通知信息。
 
-Avoiding lock contention is a key issue in a multi-core environment.
-To address this issue, PMDs are designed to work with per-core private resources as much as possible.
-For example, a PMD maintains a separate transmit queue per-core, per-port.
-In the same way, every receive queue of a port is assigned to and polled by a single logical core (lcore).
+在多核环境中避免锁竞争是一个关键问题。
+为了解决这个问题，PMD旨在尽可能地使用每个core的私有资源。
+例如，PMD每个端口维护每个core单独的传输队列。
+同样的，端口的每个接收队列都被分配给单个逻辑核并由其轮询。
 
-To comply with Non-Uniform Memory Access (NUMA), memory management is designed to assign to each logical core
-a private buffer pool in local memory to minimize remote memory access.
-The configuration of packet buffer pools should take into account the underlying physical memory architecture in terms of DIMMS,
-channels and ranks.
-The application must ensure that appropriate parameters are given at memory pool creation time.
-See :ref:`Mempool Library <Mempool_Library>`.
+为了适用NUMA架构，内存管理旨在为每个逻辑核分配本地（相同插槽）中的专用缓冲池，以最大限度地减少远程内存访问。
+数据包缓冲池的配置应该考虑到DIMMs、channels 和 ranks等底层物理内存架构。
+应用程序必须确保在内存池创建时给出合适的参数。具体内容参阅 :ref:`Mempool Library <Mempool_Library>` 。
 
 设计原则
 -----------

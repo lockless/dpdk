@@ -87,54 +87,48 @@ DPDK环境支持两种模式的数据包处理，RTC和pipeline：
 设计原则
 -----------
 
-The API and architecture of the Ethernet* PMDs are designed with the following guidelines in mind.
+Ethernet* PMDs的API和架构设计遵考虑到以下原则。
 
-PMDs must help global policy-oriented decisions to be enforced at the upper application level.
-Conversely, NIC PMD functions should not impede the benefits expected by upper-level global policies,
-or worse prevent such policies from being applied.
+PMDs 必须能够帮助上层的应用实现全局的策略。
+反之，不能阻止或妨碍上层应用的实施。
 
-For instance, both the receive and transmit functions of a PMD have a maximum number of packets/descriptors to poll.
-This allows a run-to-completion processing stack to statically fix or
-to dynamically adapt its overall behavior through different global loop policies, such as:
+例如，PMD的发送和接收函数都有大量的报文或描述符需要轮询。
+这运行RTC处理协议栈通过不同的全局循环策略静态修护或动态调整其行为如：
 
-*   Receive, process immediately and transmit packets one at a time in a piecemeal fashion.
+*   立即接收，处理并以零碎的方式一次传送数据包。
 
-*   Receive as many packets as possible, then process all received packets, transmitting them immediately.
+*   尽可能所的接收数据包，然后处理所有数据包，再发送。
 
-*   Receive a given maximum number of packets, process the received packets, accumulate them and finally send all accumulated packets to transmit.
+*   接收给定的最大量的数据包，处理接收的数据包，累加，最后将累加的数据包发送出去。
 
-To achieve optimal performance, overall software design choices and pure software optimization techniques must be considered and
-balanced against available low-level hardware-based optimization features (CPU cache properties, bus speed, NIC PCI bandwidth, and so on).
-The case of packet transmission is an example of this software/hardware tradeoff issue when optimizing burst-oriented network packet processing engines.
-In the initial case, the PMD could export only an rte_eth_tx_one function to transmit one packet at a time on a given queue.
-On top of that, one can easily build an rte_eth_tx_burst function that loops invoking the rte_eth_tx_one function to transmit several packets at a time.
-However, an rte_eth_tx_burst function is effectively implemented by the PMD to minimize the driver-level transmit cost per packet through the following optimizations:
+为了实现最优性能，需要考考整体软件设计选择和纯软件优化技术，并与可用的低层次硬件优化功能（如CPU缓存属性、总线速度、NIC PCI带宽等）进行考虑和平衡。
+报文传输的情况就是突发性网络报文处理是软硬件权衡问题的一个例子。
+在初始情况下，PMD只能导出一个 rte_eth_tx_one 函数，以便在给定的队列上一次传输一个数据包。
+最重要的是，可以轻松构建一个 rte_eth_tx_burst 函数，循环调用 rte_eth_tx_one 函数以便一次传输多个数据包。
+然而，PMD有效地实现了 rte_eth_tx_burst 函数，以通过以下优化来最小化每个数据包的驱动级传输开销：
 
-*   Share among multiple packets the un-amortized cost of invoking the rte_eth_tx_one function.
+*   在多个数据包之间共享调用 rte_eth_tx_one 函数的非摊销成本。
 
-*   Enable the rte_eth_tx_burst function to take advantage of burst-oriented hardware features (prefetch data in cache, use of NIC head/tail registers)
-    to minimize the number of CPU cycles per packet, for example by avoiding unnecessary read memory accesses to ring transmit descriptors,
-    or by systematically using arrays of pointers that exactly fit cache line boundaries and sizes.
+*   启用 rte_eth_tx_burst 函数以利用burst-oriented 硬件特性（缓存数据预取、使用NIC头/尾寄存器）以最小化每个数据包的CPU周期数，
+    例如，通过避免对环形缓传输描述符的不必要的读取寄存器访问，或通过系统地使用精确匹配告诉缓存行边界大小的指针数组。
 
-*   Apply burst-oriented software optimization techniques to remove operations that would otherwise be unavoidable, such as ring index wrap back management.
+*   使用burst-oriented软件优化技术来移除失败的操作结果，如ring索引的回滚。
 
-Burst-oriented functions are also introduced via the API for services that are intensively used by the PMD.
-This applies in particular to buffer allocators used to populate NIC rings, which provide functions to allocate/free several buffers at a time.
-For example, an mbuf_multiple_alloc function returning an array of pointers to rte_mbuf buffers which speeds up the receive poll function of the PMD when
-replenishing multiple descriptors of the receive ring.
+还通过API引入了Burst-oriented函数，这些函数在PMD服务中密集使用。
+这些函数特别适用于NIC ring的缓冲区分配器，他们提供一次分配/释放多个缓冲区的功能。
+例如，一个 mbuf_multiple_alloc 函数返回一个指向 rte_mbuf 缓冲区的指针数组，它可以在向ring添加多个描述符来加速PMD的接收轮询功能。
 
 逻辑核、内存及网卡队列的联系
 ------------------------------
 
-The DPDK supports NUMA allowing for better performance when a processor's logical cores and interfaces utilize its local memory.
-Therefore, mbuf allocation associated with local PCIe* interfaces should be allocated from memory pools created in the local memory.
-The buffers should, if possible, remain on the local processor to obtain the best performance results and RX and TX buffer descriptors
-should be populated with mbufs allocated from a mempool allocated from local memory.
+当处理器的逻辑核和接口利用其本地存储时，DPDK提供NUMA支持，以提供更好的性能。
+因此，与本地PCIE接口相关的mbuf分配应从本地内存中创建的内存池中申请。
+如果可能，缓冲区应该保留在本地处理器上以获取最佳性能，并且应使用从本地内存中分配的mempool中申请的mbuf来填充RX和TX缓冲区描述符。
 
-The run-to-completion model also performs better if packet or data manipulation is in local memory instead of a remote processors memory.
-This is also true for the pipe-line model provided all logical cores used are located on the same processor.
+如果数据包或数据操作在本地内存中，而不是在远程处理器内存上，则RTC模型也会运行得更好。
+只要所有使用的逻辑核位于同一个处理器上，pipeline模型也将获得更好的性能。
 
-Multiple logical cores should never share receive or transmit queues for interfaces since this would require global locks and hinder performance.
+所个逻辑核不应共享接口的接收或发送队列，因为这将需要全局上锁保护，而导致性能下降。
 
 设备标识及配置
 ----------------
@@ -142,32 +136,30 @@ Multiple logical cores should never share receive or transmit queues for interfa
 设备标识
 ~~~~~~~~~~~
 
-Each NIC port is uniquely designated by its (bus/bridge, device, function) PCI
-identifiers assigned by the PCI probing/enumeration function executed at DPDK initialization.
-Based on their PCI identifier, NIC ports are assigned two other identifiers:
+每个NIC端口（总线/桥、设备、功能）由其PCI标识符唯一指定。该PCI标识符在DPDK初始化时执行的PCI探测/枚举功能分配。
+根据PCI标识符，NIC端口被分配了两个其他的表示：
 
-*   A port index used to designate the NIC port in all functions exported by the PMD API.
+*   一个端口索引，用于在PMD API导出的所有函数中指定NIC端口
 
-*   A port name used to designate the port in console messages, for administration or debugging purposes.
-    For ease of use, the port name includes the port index.
+*   端口名称，用于在控制消息中指定端口，主要用于管理和调试目的。为了便于使用，端口名称包括端口索引。
 
 设备配置
 ~~~~~~~~~~
 
-The configuration of each NIC port includes the following operations:
+每个NIC端口的配置包括以下步骤：
 
-*   Allocate PCI resources
+*   分配 PCI 资源
 
-*   Reset the hardware (issue a Global Reset) to a well-known default state
+*   将硬件复位为公知的默认状态
 
-*   Set up the PHY and the link
+*   设置PHY和链路
 
-*   Initialize statistics counters
+*   初始化统计计数器
 
-The PMD API must also export functions to start/stop the all-multicast feature of a port and functions to set/unset the port in promiscuous mode.
+PMD API还必须导出函数用于启动/终止端口的全部组播功能，并且可以在混杂模式下设置/取消设置端口。
 
-Some hardware offload features must be individually configured at port initialization through specific configuration parameters.
-This is the case for the Receive Side Scaling (RSS) and Data Center Bridging (DCB) features for example.
+某些硬件卸载功能必须通过特定的配置参数在端口初始化时单独配置。
+例如，接收侧缩放（RSS）和数据中心桥接（DCB）功能就是这种情况。
 
 On-the-Fly Configuration
 ~~~~~~~~~~~~~~~~~~~~~~~~

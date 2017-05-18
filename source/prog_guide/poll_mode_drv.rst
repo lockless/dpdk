@@ -161,125 +161,88 @@ PMD API还必须导出函数用于启动/终止端口的全部组播功能，并
 某些硬件卸载功能必须通过特定的配置参数在端口初始化时单独配置。
 例如，接收侧缩放（RSS）和数据中心桥接（DCB）功能就是这种情况。
 
-On-the-Fly Configuration
-~~~~~~~~~~~~~~~~~~~~~~~~
+即时配置
+~~~~~~~~~~
 
-All device features that can be started or stopped "on the fly" (that is, without stopping the device) do not require the PMD API to export dedicated functions for this purpose.
+所有可以“即时”启动或停止的设备功能（即不停止设备），无需PMD API来导出。
 
-All that is required is the mapping address of the device PCI registers to implement the configuration of these features in specific functions outside of the drivers.
+所需要的是设备PCI寄存器的映射地址，以在驱动程序之外使用特殊的函数来配置实现这些功能。
 
-For this purpose,
-the PMD API exports a function that provides all the information associated with a device that can be used to set up a given device feature outside of the driver.
-This includes the PCI vendor identifier, the PCI device identifier, the mapping address of the PCI device registers, and the name of the driver.
+为此，PMD API导出一个函数提供可用于在驱动程序外部设置给定设备功能的设备相关联的所有信息。
+这些信息包括PCI供应商标识符，PCI设备标识符，PCI设备寄存器的映射地址以及驱动程序的名称。
 
-The main advantage of this approach is that it gives complete freedom on the choice of the API used to configure, to start, and to stop such features.
+这种方法的主要优点是可以自由地选择API来启动、配置、停止这些设备功能。
 
-As an example, refer to the configuration of the IEEE1588 feature for the Intel® 82576 Gigabit Ethernet Controller and
-the Intel® 82599 10 Gigabit Ethernet Controller controllers in the testpmd application.
+例如，testpmd应用程序中的英特尔®82576千兆以太网控制器和英特尔®82599万兆以太网控制器控制器的IEEE1588功能配置。
 
-Other features such as the L3/L4 5-Tuple packet filtering feature of a port can be configured in the same way.
-Ethernet* flow control (pause frame) can be configured on the individual port.
-Refer to the testpmd source code for details.
-Also, L4 (UDP/TCP/ SCTP) checksum offload by the NIC can be enabled for an individual packet as long as the packet mbuf is set up correctly. See `Hardware Offload`_ for details.
+可以以相同的方式配置端口的L3 / L4 5-Tuple包过滤功能等其他功能。
+以太网流控（暂停帧）可以在单个端口上进行配置。
+有关详细信息，请参阅testpmd源代码。
+此外，只要数据包mbuf设置正确，就可以为单个数据包启用网卡的L4（UDP / TCP / SCTP）校验和卸载。
+相关详细信息，请参阅 `Hardware Offload`_ 。
 
 传输队列配置
 ~~~~~~~~~~~~~~
 
-Each transmit queue is independently configured with the following information:
+每个传输队列都独立配置了以下信息：
 
-*   The number of descriptors of the transmit ring
+*   发送环上的描述符数目
 
-*   The socket identifier used to identify the appropriate DMA memory zone from which to allocate the transmit ring in NUMA architectures
+*   NUMA架构中，用于标识从哪个socket的DMA存储区分配传输环的标识
 
-*   The values of the Prefetch, Host and Write-Back threshold registers of the transmit queue
+*   传输队列的 Prefetch, Host 及 Write-Back 阈值寄存器的值
 
-*   The *minimum* transmit packets to free threshold (tx_free_thresh).
-    When the number of descriptors used to transmit packets exceeds this threshold, the network adaptor should be checked to see if it has written back descriptors.
-    A value of 0 can be passed during the TX queue configuration to indicate the default value should be used.
-    The default value for tx_free_thresh is 32.
-    This ensures that the PMD does not search for completed descriptors until at least 32 have been processed by the NIC for this queue.
+*   传输报文释放的最小阈值。
+    当用于传输数据包的描述符数量超过此阈值时，应检查网络适配器以查看是否有回写描述符。
+    在TX队列配置期间可以传递值0，以指示应使用默认值。tx_free_thresh的默认值为32。这使得PMD不会去检索完成的描述符，直到NIC已经为此队列处理了32个报文。
 
-*   The *minimum*  RS bit threshold. The minimum number of transmit descriptors to use before setting the Report Status (RS) bit in the transmit descriptor.
-    Note that this parameter may only be valid for Intel 10 GbE network adapters.
-    The RS bit is set on the last descriptor used to transmit a packet if the number of descriptors used since the last RS bit setting,
-    up to the first descriptor used to transmit the packet, exceeds the transmit RS bit threshold (tx_rs_thresh).
-    In short, this parameter controls which transmit descriptors are written back to host memory by the network adapter.
-    A value of 0 can be passed during the TX queue configuration to indicate that the default value should be used.
-    The default value for tx_rs_thresh is 32.
-    This ensures that at least 32 descriptors are used before the network adapter writes back the most recently used descriptor.
-    This saves upstream PCIe* bandwidth resulting from TX descriptor write-backs.
-    It is important to note that the TX Write-back threshold (TX wthresh) should be set to 0 when tx_rs_thresh is greater than 1.
-    Refer to the Intel® 82599 10 Gigabit Ethernet Controller Datasheet for more details.
+*   RS位最小阈值。在发送描述符中设置报告状态（RS）位之前要使用的最小发送描述符数。请注意，此参数仅适用于Intel 10 GbE网络适配器。 如果从最后一个RS位设置开始使用的描述符数量（直到用于发送数据包的第一个描述符）超过发送RS位阈值（tx_rs_thresh），则RS位被设置在用于发送数据包的最后一个描述符上。简而言之，此参数控制网络适配器将哪些传输描述符写回主机内存。在TX队列配置期间可以传递值为0，以指示应使用默认值。 tx_rs_thresh的默认值为32。这确保在网络适配器回写最近使用的描述符之前至少使用32个描述符。这样可以节省TX描述符回写所产生的上游PCIe *带宽。重要的是注意，当tx_rs_thresh大于1时，应将TX写回阈值（TX wthresh）设置为0。有关更多详细信息，请参阅英特尔®82599万兆以太网控制器数据手册。
 
-The following constraints must be satisfied for tx_free_thresh and tx_rs_thresh:
+对于tx_free_thresh和tx_rs_thresh，必须满足以下约束：
 
-*   tx_rs_thresh must be greater than 0.
+*   tx_rs_thresh必须大于0。
+*   tx_rs_thresh必须小于环的大小减去2。
+*   tx_rs_thresh必须小于或等于tx_free_thresh。
+*   tx_free_thresh必须大于0。
+*   tx_free_thresh必须小于环的大小减去3。
+*   为了获得最佳性能，当tx_rs_thresh大于1时，TX wthresh应设置为0。
 
-*   tx_rs_thresh must be less than the size of the ring minus 2.
-
-*   tx_rs_thresh must be less than or equal to tx_free_thresh.
-
-*   tx_free_thresh must be greater than 0.
-
-*   tx_free_thresh must be less than the size of the ring minus 3.
-
-*   For optimal performance, TX wthresh should be set to 0 when tx_rs_thresh is greater than 1.
-
-One descriptor in the TX ring is used as a sentinel to avoid a hardware race condition, hence the maximum threshold constraints.
+TX环中的一个描述符用作哨兵以避免硬件竞争条件，因此是最大阈值限制。
 
 .. note::
 
-    When configuring for DCB operation, at port initialization, both the number of transmit queues and the number of receive queues must be set to 128.
+    当配置DCB操作时，在端口初始化时，发送队列数和接收队列数必须设置为128。
 
 释放 Tx 缓存
 ~~~~~~~~~~~~~~
 
-Many of the drivers do not release the mbuf back to the mempool, or local cache,
-immediately after the packet has been transmitted.
-Instead, they leave the mbuf in their Tx ring and
-either perform a bulk release when the ``tx_rs_thresh`` has been crossed
-or free the mbuf when a slot in the Tx ring is needed.
+许多驱动程序并没有在数据包传输后立即将mbuf释放回到mempool或本地缓存中。
+相反，他们将mbuf留在Tx环中，当需要在Tx环中插入，或者 ``tx_rs_thresh`` 已经超过时，执行批量释放。
 
-An application can request the driver to release used mbufs with the ``rte_eth_tx_done_cleanup()`` API.
-This API requests the driver to release mbufs that are no longer in use,
-independent of whether or not the ``tx_rs_thresh`` has been crossed.
-There are two scenarios when an application may want the mbuf released immediately:
+应用程序请求驱动程通过接口 ``rte_eth_tx_done_cleanup()`` 释放使用的mbuf。、
+该API请求驱动程序释放不再使用的mbufs，而不管``tx_rs_thresh`` 是否已被超过。
+有两种情况会使得应用程序可能想要立即释放mbuf：
 
-* When a given packet needs to be sent to multiple destination interfaces
-  (either for Layer 2 flooding or Layer 3 multi-cast).
-  One option is to make a copy of the packet or a copy of the header portion that needs to be manipulated.
-  A second option is to transmit the packet and then poll the ``rte_eth_tx_done_cleanup()`` API
-  until the reference count on the packet is decremented.
-  Then the same packet can be transmitted to the next destination interface.
-  The application is still responsible for managing any packet manipulations needed
-  between the different destination interfaces, but a packet copy can be avoided.
-  This API is independent of whether the packet was transmitted or dropped,
-  only that the mbuf is no longer in use by the interface.
+* 当给定的数据包需要发送到多个目标接口（对于第2层洪泛或第3层多播）。
+  一种方法是复制数据包或者复制需要操作的数据包头部。
+  另一种方法是发送数据包，然后轮询 ``rte_eth_tx_done_cleanup()`` 接口直到报文引用递减。
+  接下来，这个报文就可以发送到下一个目的接口。
+  该应用程序仍然负责管理不同目标接口之间所需的任何数据包操作，但可以避免数据复制。
+  该API独立于数据包是传输还是丢弃，只是mbuf不再被接口使用。
+  
+* 一些应用程序被设计为进行多次运行，如数据包生成器。
+  为了运行的性能原因和一致性，应用程序可能希望在每个运行之间重新设置为初始状态，其中所有mbufs都返回到mempool。
+  在这种情况下，它可以为其已使用的每个目标接口调 ``rte_eth_tx_done_cleanup()`` API 以请求它释放所有使用的mbuf。
 
-* Some applications are designed to make multiple runs, like a packet generator.
-  For performance reasons and consistency between runs,
-  the application may want to reset back to an initial state
-  between each run, where all mbufs are returned to the mempool.
-  In this case, it can call the ``rte_eth_tx_done_cleanup()`` API
-  for each destination interface it has been using
-  to request it to release of all its used mbufs.
-
-To determine if a driver supports this API, check for the *Free Tx mbuf on demand* feature
-in the *Network Interface Controller Drivers* document.
+要确定驱动程序是否支持该API，请检查 *Network Interface Controller Drivers* 文档中的 * Free Tx mbuf on demand * 功能。
 
 硬件卸载
 ~~~~~~~~~~
 
-Depending on driver capabilities advertised by
-``rte_eth_dev_info_get()``, the PMD may support hardware offloading
-feature like checksumming, TCP segmentation or VLAN insertion.
+根据 ``rte_eth_dev_info_get()`` 提供的驱动程序功能，PMD可能支持硬件卸载功能，如校验和TCP分段或VLAN插入。
 
-The support of these offload features implies the addition of dedicated
-status bit(s) and value field(s) into the rte_mbuf data structure, along
-with their appropriate handling by the receive/transmit functions
-exported by each PMD. The list of flags and their precise meaning is
-described in the mbuf API documentation and in the in :ref:`Mbuf Library
-<Mbuf_Library>`, section "Meta Information".
+这些卸载功能的支持意味着将专用状态位和值字段添加到rte_mbuf数据结构中，以及由每个PMD导出的接收/发送功能的适当处理。
+标记列表及其精确含义在mbuf API文档及 :ref:`Mbuf Library <Mbuf_Library>` 中 "Meta Information"章节。
 
 Poll Mode Driver API
 --------------------

@@ -244,63 +244,55 @@ TX环中的一个描述符用作哨兵以避免硬件竞争条件，因此是最
 这些卸载功能的支持意味着将专用状态位和值字段添加到rte_mbuf数据结构中，以及由每个PMD导出的接收/发送功能的适当处理。
 标记列表及其精确含义在mbuf API文档及 :ref:`Mbuf Library <Mbuf_Library>` 中 "Meta Information"章节。
 
-Poll Mode Driver API
---------------------
+PMD API
+--------
 
-Generalities
-~~~~~~~~~~~~
+概要
+~~~~~~
 
-By default, all functions exported by a PMD are lock-free functions that are assumed
-not to be invoked in parallel on different logical cores to work on the same target object.
-For instance, a PMD receive function cannot be invoked in parallel on two logical cores to poll the same RX queue of the same port.
-Of course, this function can be invoked in parallel by different logical cores on different RX queues.
-It is the responsibility of the upper-level application to enforce this rule.
+默认情况下，PMD提供的所有外部函数都是无锁函数，这些函数假定在同一目标设备上不会再不同的逻辑core上并行调用。
+例如，PMD接收函数不能再两个逻辑核上并行调用，以轮询相同端口的相同RX队列。
+当然，这个函数可以由不同的RX队列上的不同逻辑核并行调用。
+上级应用程序应该保证强制执行这条规则。
 
-If needed, parallel accesses by multiple logical cores to shared queues can be explicitly protected by dedicated inline lock-aware functions
-built on top of their corresponding lock-free functions of the PMD API.
+如果需要，多个逻辑核到并行队列的并行访问可以通过专门的在线加锁来显式保护，这些加锁函数是建立在相应的无锁API之上的。
 
-Generic Packet Representation
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-A packet is represented by an rte_mbuf structure, which is a generic metadata structure containing all necessary housekeeping information.
-This includes fields and status bits corresponding to offload hardware features, such as checksum computation of IP headers or VLAN tags.
+通用报文表示
+~~~~~~~~~~~~~~
 
-The rte_mbuf data structure includes specific fields to represent, in a generic way, the offload features provided by network controllers.
-For an input packet, most fields of the rte_mbuf structure are filled in by the PMD receive function with the information contained in the receive descriptor.
-Conversely, for output packets, most fields of rte_mbuf structures are used by the PMD transmit function to initialize transmit descriptors.
+数据包由数据结构 rte_mbuf 表示，这是一个包含所有必要信息的通用元数据结构。
+这些信息包括与硬件特征相对应的字段和状态位，如IP头部和VLAN标签的校验和。
 
-The mbuf structure is fully described in the :ref:`Mbuf Library <Mbuf_Library>` chapter.
+数据结构 rte_mbuf 包括以通用方式表示网络控制器提供的硬件功能对应的字段。
+对于输入数据包，rte_mbuf 的大部分字段都由PMD来填充，包括接收描述符中的信息。
+相反，对于输出数据包，rte_mbuf的大部分字段由PMD发送函数用于初始化发送描述符。
 
-Ethernet Device API
-~~~~~~~~~~~~~~~~~~~
+数据结构 mbuf 的更全面的描述，请参阅 :ref:`Mbuf Library <Mbuf_Library>` 章节。
 
-The Ethernet device API exported by the Ethernet PMDs is described in the *DPDK API Reference*.
+以太网设备 API
+~~~~~~~~~~~~~~~~
 
-Extended Statistics API
-~~~~~~~~~~~~~~~~~~~~~~~
+以太网PMD驱动导出的以太网设备API请参阅 *DPDK API Reference* 描述。
 
-The extended statistics API allows each individual PMD to expose a unique set
-of statistics. Accessing these from application programs is done via two
-functions:
+扩展的统计 API
+~~~~~~~~~~~~~~~
 
-* ``rte_eth_xstats_get``: Fills in an array of ``struct rte_eth_xstat``
-  with extended statistics.
-* ``rte_eth_xstats_get_names``: Fills in an array of
-  ``struct rte_eth_xstat_name`` with extended statistic name lookup
-  information.
+扩展的统计API允许每个独立的PMD导出一组唯一的统计信息。
+应用程序通过以下两个操作来访问这些统计信息：
 
-Each ``struct rte_eth_xstat`` contains an identifier and value pair, and
-each ``struct rte_eth_xstat_name`` contains a string. Each identifier
-within the ``struct rte_eth_xstat`` lookup array must have a corresponding
-entry in the ``struct rte_eth_xstat_name`` lookup array. Within the latter
-the index of the entry is the identifier the string is associated with.
-These identifiers, as well as the number of extended statistic exposed, must
-remain constant during runtime. Note that extended statistic identifiers are
-driver-specific, and hence might not be the same for different ports.
+* ``rte_eth_xstats_get``: 使用扩展统计信息填充 ``struct rte_eth_xstat`` 数组。
 
-A naming scheme exists for the strings exposed to clients of the API. This is
-to allow scraping of the API for statistics of interest. The naming scheme uses
-strings split by a single underscore ``_``. The scheme is as follows:
+* ``rte_eth_xstats_get_names``: 使用扩展统计名称查找信息填充 ``struct rte_eth_xstat_name`` 数组。
+
+每个 ``struct rte_eth_xstat`` 包含一个键-值对，每个 ``struct rte_eth_xstat_name`` 包含一个字符串。
+ ``struct rte_eth_xstat`` 查找数组中的每个标识符必须在 ``struct rte_eth_xstat_name`` 查找数组中有一个对应条目。
+在后者中，条目的索引是字符串关联的标识符。
+这些标识符以及暴露的扩展统计技术在运行是必须保持不变。请注意，扩展统计信息标识符是驱动程序特定的，因此，对于不同的端口可能不一样。
+
+对于暴露给API的客户端的字符串，存在一个命名方案。
+这是为了允许API获取感兴趣的信息。
+命名方案使用下划线分割的字符串来表示，如下：
 
 * direction
 * detail 1
@@ -308,32 +300,27 @@ strings split by a single underscore ``_``. The scheme is as follows:
 * detail n
 * unit
 
-Examples of common statistics xstats strings, formatted to comply to the scheme
-proposed above:
+常规统计示例字符串如下，符合上面的方案：
 
 * ``rx_bytes``
 * ``rx_crc_errors``
 * ``tx_multicast_packets``
 
-The scheme, although quite simple, allows flexibility in presenting and reading
-information from the statistic strings. The following example illustrates the
-naming scheme:``rx_packets``. In this example, the string is split into two
-components. The first component ``rx`` indicates that the statistic is
-associated with the receive side of the NIC.  The second component ``packets``
-indicates that the unit of measure is packets.
+该方案虽然简单，但可以灵活地显示和读取统计字符串中的信息。
+以下示例说明了命名方案 ``rx_packets`` 的使用。
+在这个例子中，字符串被分成两个组件。
+第一个 ``rx`` 表示统计信息与NIC的接收端相关联。
+第二个 ``packets`` 表示测量单位是数据包。
 
-A more complicated example: ``tx_size_128_to_255_packets``. In this example,
-``tx`` indicates transmission, ``size``  is the first detail, ``128`` etc are
-more details, and ``packets`` indicates that this is a packet counter.
+一个更为复杂的例子是 ``tx_size_128_to_255_packets`` 。
+在这个例子中， ``tx`` 表示传输， ``size`` 是第一个细节， ``128`` 等表示更多的细节， ``packets`` 表示这是一个数据包计数器。
 
-Some additions in the metadata scheme are as follows:
+元数据中的一些方案补充如下：
 
-* If the first part does not match ``rx`` or ``tx``, the statistic does not
-  have an affinity with either receive of transmit.
+* 如果第一部分不符合 ``rx`` 或 ``tx`` ，统计计数器与传送或接收不相关。
 
-* If the first letter of the second part is ``q`` and this ``q`` is followed
-  by a number, this statistic is part of a specific queue.
+* 如果第二部分的第一个字母是 ``q`` 且这个 ``q`` 后跟一个数字，则这个统计数据是特定队列的一部分。
 
-An example where queue numbers are used is as follows: ``tx_q7_bytes`` which
-indicates this statistic applies to queue number 7, and represents the number
-of transmitted bytes on that queue.
+
+使用队列号的示例如下：
+ ``tx_q7_bytes`` 表示此统计信息适用于队列号7，并表示该队列上传输的字节数。

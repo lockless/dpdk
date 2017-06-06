@@ -30,51 +30,80 @@
 
 .. _Generic_flow_API:
 
-通用流 API (rte_flow)
-======================
+Generic flow API (rte_flow)
+===========================
 
-概述
-------
-
-此API提供了一种通用的方式来配置硬件以匹配特定的 Ingress 或 Egress 流量，根据用户的任何配置规则更改其操作及查询相关计数器。
-
-所有API带有前缀 *rte_flow* ，在文件 ``rte_flow.h`` 中定义。
-
-- 可以对报文数据(如协议头部，载荷)及报文属性(如关联的物理端口，虚拟设备ID等)执行匹配。
-
-- 可能的操作包括丢弃流量，将流量转移到特定队列、虚拟/物理设备或端口，执行隧道解封、添加标记等操作。
-
-它比涵盖其功能的传统过滤框架层次更高，以便明确的行为暴露对所有P轮询模式驱动程序来讲相同的单个操作接口。
-
-迁移现有应用程序的几种方法在 `API migration`_ 中有描述。
-
-流规则
+Overview
 --------
 
-描述
-~~~~~~
+This API provides a generic means to configure hardware to match specific
+ingress or egress traffic, alter its fate and query related counters
+according to any number of user-defined rules.
 
-流规则是具有匹配模式的属性和动作列表的组合。
-流规则构成了此API的基础。
+It is named *rte_flow* after the prefix used for all its symbols, and is
+defined in ``rte_flow.h``.
 
-一个流规则可以具有几个不同的动作(如在将数据重定向到特定队列之前执行计数，封装，解封装等操作)，
-而不是依靠几个规则来实现这些动作，应用程序操作具体的硬件实现细节来顺序执行。
+- Matching can be performed on packet data (protocol headers, payload) and
+  properties (e.g. associated physical port, virtual device function ID).
 
-API提供了基于规则的不同优先级支持，例如，当报文匹配两个规则时，强制先执行特定规则。
-然而，对于支持多个优先级的硬件，这一条不能保证。
-当支持时，可用优先级的数量通常较低，这也是为什么还可以通过PMDs在软件中实现(如通过重新排序规则可以模拟缺失的优先级)。
+- Possible operations include dropping traffic, diverting it to specific
+  queues, to virtual/physical device functions or ports, performing tunnel
+  offloads, adding marks and so on.
 
-为了尽可能保持与硬件无关，默认情况下所有规则都被认为具有相同的优先级，这意味着重叠规则（当数据包被多个过滤器匹配时）之间的顺序是未定义的。
+It is slightly higher-level than the legacy filtering framework which it
+encompasses and supersedes (including all functions and filter types) in
+order to expose a single interface with an unambiguous behavior that is
+common to all poll-mode drivers (PMDs).
 
-PMD可以在可以被检测到的情况下（例如，如果模式匹配现有过滤器）拒绝在给定优先级下创建重叠规则。
+Several methods to migrate existing applications are described in `API
+migration`_.
 
-因此，对于给定的优先级，可预测的结果只能通过非重叠规则来实现，在所有协议层上使用完全匹配。
+Flow rule
+---------
 
-流规则也可以分组，流规则优先级特定于它们所属的组。因此，给定组中的所有流规则在另一组之前或之后进行处理。
+Description
+~~~~~~~~~~~
 
-根据规则支持多个操作可以在非默认硬件优先级之前内部实现，因此两个功能可能不能同时应用于应用程序。
+A flow rule is the combination of attributes with a matching pattern and a
+list of actions. Flow rules form the basis of this API.
 
-考虑到允许的模式/动作组合不能提前知道，并且将导致不切实际地大量的暴露能力，提供了从当前设备配置状态验证给定规则的方法。
+Flow rules can have several distinct actions (such as counting,
+encapsulating, decapsulating before redirecting packets to a particular
+queue, etc.), instead of relying on several rules to achieve this and having
+applications deal with hardware implementation details regarding their
+order.
+
+Support for different priority levels on a rule basis is provided, for
+example in order to force a more specific rule to come before a more generic
+one for packets matched by both. However hardware support for more than a
+single priority level cannot be guaranteed. When supported, the number of
+available priority levels is usually low, which is why they can also be
+implemented in software by PMDs (e.g. missing priority levels may be
+emulated by reordering rules).
+
+In order to remain as hardware-agnostic as possible, by default all rules
+are considered to have the same priority, which means that the order between
+overlapping rules (when a packet is matched by several filters) is
+undefined.
+
+PMDs may refuse to create overlapping rules at a given priority level when
+they can be detected (e.g. if a pattern matches an existing filter).
+
+Thus predictable results for a given priority level can only be achieved
+with non-overlapping rules, using perfect matching on all protocol layers.
+
+Flow rules can also be grouped, the flow rule priority is specific to the
+group they belong to. All flow rules in a given group are thus processed
+either before or after another group.
+
+Support for multiple actions per rule may be implemented internally on top
+of non-default hardware priorities, as a result both features may not be
+simultaneously available to applications.
+
+Considering that allowed pattern/actions combinations cannot be known in
+advance and would result in an impractically large number of capabilities to
+expose, a method is provided to validate a given rule from the current
+device configuration state.
 
 This enables applications to check if the rule types they need is supported
 at initialization time, before starting their data path. This method can be

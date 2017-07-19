@@ -76,131 +76,91 @@ PMD可以在可以被检测到的情况下（例如，如果模式匹配现有�
 
 考虑到允许的模式/动作组合不能提前知道，并且将导致不切实际地大量的暴露能力，提供了从当前设备配置状态验证给定规则的方法。
 
-This enables applications to check if the rule types they need is supported
-at initialization time, before starting their data path. This method can be
-used anytime, its only requirement being that the resources needed by a rule
-should exist (e.g. a target RX queue should be configured first).
+这样，在启动数据路径之前，应用程序可以检查在初始化时是否支持所需的规则类型。该方法可以随时使用，其唯一要求是应该存在规则所需的资源（例如，应首先配置目标RX队列）。
 
-Each defined rule is associated with an opaque handle managed by the PMD,
-applications are responsible for keeping it. These can be used for queries
-and rules management, such as retrieving counters or other data and
-destroying them.
+每个定义的规则与由PMD管理的不透明句柄相关联，应用程序负责维护它。这些句柄可用于查询和规则管理，例如检索计数器或其他数据并销毁它们。
 
-To avoid resource leaks on the PMD side, handles must be explicitly
-destroyed by the application before releasing associated resources such as
-queues and ports.
+为了避免PMD方面的资源泄漏，在释放相关资源（如队列和端口）之前，应用程序必须显式地销毁句柄。
 
-The following sections cover:
 
-- **Attributes** (represented by ``struct rte_flow_attr``): properties of a
-  flow rule such as its direction (ingress or egress) and priority.
+以下小节覆盖如下内容：
 
-- **Pattern item** (represented by ``struct rte_flow_item``): part of a
-  matching pattern that either matches specific packet data or traffic
-  properties. It can also describe properties of the pattern itself, such as
-  inverted matching.
+- **属性** (由 ``struct rte_flow_attr`` 表示): 流规则的属性，例如其方向（Ingress或Egress）和优先级。
 
-- **Matching pattern**: traffic properties to look for, a combination of any
-  number of items.
+- **模式条目** (由 ``struct rte_flow_item`` 表示): 匹配模式的一部分，匹配特定的数据包数据或流量属性。也可以描述模式本身属性，如反向匹配。
 
-- **Actions** (represented by ``struct rte_flow_action``): operations to
-  perform whenever a packet is matched by a pattern.
+- **匹配条目**: 查找的属性，组合任意的模式。
 
-Attributes
-~~~~~~~~~~
+- **动作** (由 ``struct rte_flow_action`` 表示): 每当数据包被模式匹配时执行的操作。
 
-Attribute: Group
+属性
+~~~~~~
+
+属性: 组
+^^^^^^^^^^
+
+流规则可以通过为其分配一个公共的组号来分组。较低的值具有较高的优先级。组0具有最高优先级。
+
+虽然是可选的，但是建议应用程序尽可能将类似的规则分组，以充分利用硬件功能（例如，优化的匹配）并解决限制（例如，给定组中可能允许的单个模式类型）。
+
+请注意，并不保证支持多个组。
+
+属性: 优先级
+^^^^^^^^^^^^^^
+
+可以将优先级分配给流规则。像Group一样，较低的值表示较高的优先级，0为最大值。
+
+具有优先级0的Group 8流规则，总是在Group 0优先级8的优先级之后才匹配。
+
+组和优先级是任意的，取决于应用程序，它们不需要是连续的，也不需要从0开始，但是最大数量因设备而异，并且可能受到现有流规则的影响。
+
+如果某个报文在给定的优先级和Group中被几个规则匹配，那么结果是未定义的。 它可以采取任何路径，可能重复，甚至导致不可恢复的错误。
+
+请注意，不保证能支持超过一个优先级。
+
+
+属性: 流量方向
 ^^^^^^^^^^^^^^^^
 
-Flow rules can be grouped by assigning them a common group number. Lower
-values have higher priority. Group 0 has the highest priority.
+流量规则可以应用于入站和/或出站流量（Ingress/Egress）。
 
-Although optional, applications are encouraged to group similar rules as
-much as possible to fully take advantage of hardware capabilities
-(e.g. optimized matching) and work around limitations (e.g. a single pattern
-type possibly allowed in a given group).
+多个模式条目和操作都是有效的，可以在个方向中使用。但是必须至少指定一个方向。
 
-Note that support for more than a single group is not guaranteed.
+不推荐对给定规则一次指定两个方向，但在少数情况下可能是有效的（例如共享计数器）。
 
-Attribute: Priority
-^^^^^^^^^^^^^^^^^^^
 
-A priority level can be assigned to a flow rule. Like groups, lower values
-denote higher priority, with 0 as the maximum.
+模式条目
+~~~~~~~~~~
 
-A rule with priority 0 in group 8 is always matched after a rule with
-priority 8 in group 0.
+模式条目分成两类：
 
-Group and priority levels are arbitrary and up to the application, they do
-not need to be contiguous nor start from 0, however the maximum number
-varies between devices and may be affected by existing flow rules.
+- 匹配协议头部及报文数据（ANY，RAW，ETH，VLAN，IPV4，IPV6，ICMP，UDP，TCP，SCTP,，VXLAN，MPLS，GRE等等）。
 
-If a packet is matched by several rules of a given group for a given
-priority level, the outcome is undefined. It can take any path, may be
-duplicated or even cause unrecoverable errors.
+- 匹配元数据或影响模式处理（END，VOID，INVERT，PF，VF，PORT等等）。
 
-Note that support for more than a single priority level is not guaranteed.
+条目规范结构用于匹配协议字段（或项目属性）中的特定值。文档描述每个条目是否与一个条目及其类型名称相关联。
 
-Attribute: Traffic direction
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+可以为给定的条目最多设置三个相同类型的结构：
 
-Flow rules can apply to inbound and/or outbound traffic (ingress/egress).
+- ``spec``: 要匹配的数值（如IPv4地址）。
 
-Several pattern items and actions are valid and can be used in both
-directions. At least one direction must be specified.
+- ``last``: 规格中的相应字段的范围上限。
 
-Specifying both directions at once for a given rule is not recommended but
-may be valid in a few cases (e.g. shared counters).
+- ``mask``: 应用于spec和last的位掩码（如匹配IPv4地址的前缀）。
 
-Pattern item
-~~~~~~~~~~~~
+使用限制和期望行为：
 
-Pattern items fall in two categories:
+- 没有 ``spec`` 就设置 ``mask`` 或 ``last`` 是错误的。
 
-- Matching protocol headers and packet data (ANY, RAW, ETH, VLAN, IPV4,
-  IPV6, ICMP, UDP, TCP, SCTP, VXLAN, MPLS, GRE and so on), usually
-  associated with a specification structure.
+- 错误的 ``last`` 值如0或者等于 ``spec`` 将被忽略，他们不能产生范围。不支持低于 ``spec`` 的非0值。
 
-- Matching meta-data or affecting pattern processing (END, VOID, INVERT, PF,
-  VF, PORT and so on), often without a specification structure.
+- 设置 ``spce`` 和可选的 ``last`` ，而不设置 ``mask`` 会导致PMD使用该条目定义的默认`` mask``（定义为 ``rte_flow_item_{name}_mask`` 常量）。不设置他们相当于提供空掩码匹配。
 
-Item specification structures are used to match specific values among
-protocol fields (or item properties). Documentation describes for each item
-whether they are associated with one and their type name if so.
+- 不设置他们相当于提供空掩码匹配。
 
-Up to three structures of the same type can be set for a given item:
+- 掩码是用于 ``spec`` 和 ``last`` 的简单位掩码，如果不小心使用，可能会产生意想不到的结果。例如，对于IPv4地址字段，spec提供10.1.2.3，last提供10.3.4.5，掩码为255.255.0.0，有效范围为10.1.0.0～10.3.255.255。
 
-- ``spec``: values to match (e.g. a given IPv4 address).
-
-- ``last``: upper bound for an inclusive range with corresponding fields in
-  ``spec``.
-
-- ``mask``: bit-mask applied to both ``spec`` and ``last`` whose purpose is
-  to distinguish the values to take into account and/or partially mask them
-  out (e.g. in order to match an IPv4 address prefix).
-
-Usage restrictions and expected behavior:
-
-- Setting either ``mask`` or ``last`` without ``spec`` is an error.
-
-- Field values in ``last`` which are either 0 or equal to the corresponding
-  values in ``spec`` are ignored; they do not generate a range. Nonzero
-  values lower than those in ``spec`` are not supported.
-
-- Setting ``spec`` and optionally ``last`` without ``mask`` causes the PMD
-  to use the default mask defined for that item (defined as
-  ``rte_flow_item_{name}_mask`` constants).
-
-- Not setting any of them (assuming item type allows it) is equivalent to
-  providing an empty (zeroed) ``mask`` for broad (nonspecific) matching.
-
-- ``mask`` is a simple bit-mask applied before interpreting the contents of
-  ``spec`` and ``last``, which may yield unexpected results if not used
-  carefully. For example, if for an IPv4 address field, ``spec`` provides
-  *10.1.2.3*, ``last`` provides *10.3.4.5* and ``mask`` provides
-  *255.255.0.0*, the effective range becomes *10.1.0.0* to *10.3.255.255*.
-
-Example of an item specification matching an Ethernet header:
+匹配以太网头部的条目示例：
 
 .. _table_rte_flow_pattern_item_example:
 

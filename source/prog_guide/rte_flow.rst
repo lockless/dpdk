@@ -184,24 +184,20 @@ PMD可以在可以被检测到的情况下（例如，如果模式匹配现有�
    |          | ``type`` | ``0x0000``         |
    +----------+----------+--------------------+
 
-Non-masked bits stand for any value (shown as ``?`` below), Ethernet headers
-with the following properties are thus matched:
+无掩码的位可以匹配任意的值(显示为 ``?`` ), 以太头部具有如下的属性匹配信息：
 
 - ``src``: ``??:01:02:03:??``
 - ``dst``: ``??:??:??:??:01``
 - ``type``: ``0x????``
 
-Matching pattern
-~~~~~~~~~~~~~~~~
+匹配模式
+~~~~~~~~~
 
-A pattern is formed by stacking items starting from the lowest protocol
-layer to match. This stacking restriction does not apply to meta items which
-can be placed anywhere in the stack without affecting the meaning of the
-resulting pattern.
+模式是指通过堆叠从底层协议开始匹配条目。这种堆叠限制不适用于可以放在任意位置而不影响其结果的元条目。
 
-Patterns are terminated by END items.
+模式由最后的条目终结。
 
-Examples:
+例子:
 
 .. _table_rte_flow_tcpv4_as_l4:
 
@@ -271,9 +267,7 @@ Examples:
    | 7     | END      |
    +-------+----------+
 
-The above example shows how meta items do not affect packet data matching
-items, as long as those remain stacked properly. The resulting matching
-pattern is identical to "TCPv4 as L4".
+上面的例子显示了一个元条目，如何实现不影响报文数据匹配结果，只要他们保持堆叠正确。结果匹配与 "TCPv4 as L4" 条目相同。
 
 .. _table_rte_flow_udpv6_anywhere:
 
@@ -289,10 +283,9 @@ pattern is identical to "TCPv4 as L4".
    | 2     | END  |
    +-------+------+
 
-If supported by the PMD, omitting one or several protocol layers at the
-bottom of the stack as in the above example (missing an Ethernet
-specification) enables looking up anywhere in packets.
+如果PMD支持，如上述示例（缺少以太网规范），忽略堆栈底部的一个或多个协议层，可以查找数据包中的任何位置。
 
+无论支持的封装（例如VXLAN有效载荷）是否通过模式匹配，
 It is unspecified whether the payload of supported encapsulations
 (e.g. VXLAN payload) is matched by such a pattern, which may apply to inner,
 outer or both packets.

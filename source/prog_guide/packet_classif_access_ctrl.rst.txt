@@ -28,39 +28,42 @@
     (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
     OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-报文分类及访问控制
-=====================
+Packet Classification and Access Control
+========================================
 
-DPDK提供了一个访问控制库，它能够根据一组分类规则对输入数据包进行分类。
+The DPDK provides an Access Control library that gives the ability
+to classify an input packet based on a set of classification rules.
 
-ACL库用于对具有多个类别的一组规则执行N元组搜索，并为每个类别找到最佳匹配（最高优先级）。
-库API提供以下基本操作：
+The ACL library is used to perform an N-tuple search over a set of rules with multiple categories
+and find the best match (highest priority) for each category.
+The library API provides the following basic operations:
 
-*   创建一个新的访问控制（AC）上下文
+*   Create a new Access Control (AC) context.
 
-*   向上下文中添加一条规则
+*   Add rules into the context.
 
-*   对上下文中的所有规则，构建执行数据包分类所需的运行时结构
+*   For all rules in the context, build the runtime structures necessary to perform packet classification.
 
-*   执行输入数据包分类
+*   Perform input packet classifications.
 
-*   释放AC上下文及其运行时结构和相关的内存
+*   Destroy an AC context and its runtime structures and free the associated memory.
 
-概述
-------
+Overview
+--------
 
-规则定义
-~~~~~~~~~~~
+Rule definition
+~~~~~~~~~~~~~~~
 
-当前的实现允许每个AC上下文的用户指定其自己的规则，通过该规则将执行数据包分类。
-尽管规则字段布局几乎没有限制：
+The current implementation allows the user for each AC context to specify its own rule (set of fields)
+over which packet classification will be performed.
+Though there are few restrictions on the rule fields layout:
 
-*  规则定义中的第一个字段必须是一个字节长。
-*  所有后续字段必须分组为4个连续字节的集合。
+*  First field in the rule definition has to be one byte long.
+*  All subsequent fields has to be grouped into sets of 4 consecutive bytes.
 
-这两个约束主要是出于性能原因 - 搜索函数将第一个输入字节作为流程设置的一部分进行处理，然后展开搜索函数的内部循环以一次处理四个输入字节。
+This is done mainly for performance reasons - search function processes the first input byte as part of the flow setup and then the inner loop of the search function is unrolled to process four input bytes at a time.
 
-为了定义AC规则中的各个字段，可以使用以下的数据结构：
+To define each field inside an AC rule, the following structure is used:
 
 .. code-block:: c
 
@@ -72,34 +75,34 @@ ACL库用于对具有多个类别的一组规则执行N元组搜索，并为每�
         uint32_t offset;      /*< offset to start of field. */
     };
 
-
-各个字段的含义如下：
-
 *   type
-    这个字段可以有如下三种选择：
+    The field type is one of three choices:
 
-    *   _MASK - 用于像IP地址这种具有值和掩码字段
+    *   _MASK - for fields such as IP addresses that have a value and a mask defining the number of relevant bits.
 
-    *   _RANGE - 用于像port这种具有上下限期间的字段
+    *   _RANGE - for fields such as ports that have a lower and upper value for the field.
 
-    *   _BITMASK - 用于像协议标识符这种具有值和位掩码的字段
+    *   _BITMASK - for fields such as protocol identifiers that have a value and a bit mask.
 
 *   size
-    size参数定义了字段的字节数，可用的值为1, 2, 4, 或8字节。
-    注意，由于输入字节分组，必须将1或2字节的字段定义为构成4个连续输入字节的连续字段。
-    并且，最好将8个或更多个字节的字段定义为4个字节字段，以便构建过程可以消除额外的字段。
+    The size parameter defines the length of the field in bytes. Allowable values are 1, 2, 4, or 8 bytes.
+    Note that due to the grouping of input bytes, 1 or 2 byte fields must be defined as consecutive fields
+    that make up 4 consecutive input bytes.
+    Also, it is best to define fields of 8 or more bytes as 4 byte fields so that
+    the build processes can eliminate fields that are all wild.
 
 *   field_index
-    表示规则中字段位置的基于零的值; 0到N-1为N字段。
+    A zero-based value that represents the position of the field inside the rule; 0 to N-1 for N fields.
 
 *   input_index
-    如上所示，所有输入字段，除了第一个，必须是4个连续字节的组。
-    输入索引则指定了该字段属于哪个输入组。
+    As mentioned above, all input fields, except the very first one, must be in groups of 4 consecutive bytes.
+    The input index specifies to which input group that field belongs to.
 
 *   offset
-    偏移定义了该字段的偏移值。该偏移从buffer参数开始算起。
+    The offset field defines the offset for the field.
+    This is the offset from the beginning of the buffer parameter for the search.
 
-举例，为了定义IPv4 5元组分类结构：
+For example, to define classification for the following IPv4 5-tuple structure:
 
 .. code-block:: c
 
@@ -111,7 +114,7 @@ ACL库用于对具有多个类别的一组规则执行N元组搜索，并为每�
         uint16_t port_dst;
     };
 
-可以使用以下数组字段定义：
+The following array of field definitions can be used:
 
 .. code-block:: c
 
@@ -164,16 +167,17 @@ ACL库用于对具有多个类别的一组规则执行N元组搜索，并为每�
         },
     };
 
-这个IPv4 五元组的一个典型实例如下：
+A typical example of such an IPv4 5-tuple rule is a follows:
 
 ::
 
     source addr/mask  destination addr/mask  source ports dest ports protocol/mask
     192.168.1.0/24    192.168.2.31/32        0:65535      1234:1234  17/0xff
 
-任何IPv4报文，具有协议ID为 17(UDP)，源IP为 192.168.1.[0-255]，目的IP为 192.168.2.31，源端口为 [0-65535] 且目的端口为 1234 的报文都匹配这个条目。
+Any IPv4 packets with protocol ID 17 (UDP), source address 192.168.1.[0-255], destination address 192.168.2.31,
+source port [0-65535] and destination port 1234 matches the above rule.
 
-为了定义如下的IPv6 头部使用的2-元组分类: <protocol, IPv6 source address> ：
+To define classification for the IPv6 2-tuple: <protocol, IPv6 source address> over the following IPv6 header structure:
 
 .. code-block:: c
 
@@ -186,7 +190,7 @@ ACL库用于对具有多个类别的一组规则执行N元组搜索，并为每�
         uint8_t dst_addr[16];  /* IP address of destination host(s). */
     } __attribute__((__packed__));
 
-可以使用以下的数组字段：
+The following array of field definitions can be used:
 
 .. code-block:: c
 
@@ -232,18 +236,19 @@ ACL库用于对具有多个类别的一组规则执行N元组搜索，并为每�
         },
     };
 
-典型实例如下：
+A typical example of such an IPv6 2-tuple rule is a follows:
 
 ::
 
     source addr/mask                              protocol/mask
     2001:db8:1234:0000:0000:0000:0000:0000/48     6/0xff
 
-任何IPv6报文，具有协议ID为6 (TCP)，且源IP在范围
-[2001:db8:1234:0000:0000:0000:0000:0000 - 2001:db8:1234:ffff:ffff:ffff:ffff:ffff] 内的报文都将匹配这个规则。
+Any IPv6 packets with protocol ID 6 (TCP), and source address inside the range
+[2001:db8:1234:0000:0000:0000:0000:0000 - 2001:db8:1234:ffff:ffff:ffff:ffff:ffff] matches the above rule.
 
-在下面的例子中，搜索键值的最后一个元素是8bit，因此，出现输入字段的4个字节未完全占用的情况。
-分类结构为：
+In the following example the last element of the search key is 8-bit long.
+So it is a case where the 4 consecutive bytes of an input field are not fully occupied.
+The structure for the classification is:
 
 .. code-block:: c
 
@@ -251,10 +256,10 @@ ACL库用于对具有多个类别的一组规则执行N元组搜索，并为每�
         uint8_t ip_proto;
         uint32_t ip_src;
         uint32_t ip_dst;
-        uint8_t tos;      /*< 这里通常是32bit的元素 */
+        uint8_t tos;      /*< This is partially using a 32-bit input element */
     };
 
-可以使用以下的数组字段：
+The following array of field definitions can be used:
 
 .. code-block:: c
 
@@ -287,7 +292,8 @@ ACL库用于对具有多个类别的一组规则执行N元组搜索，并为每�
         },
 
         /*
-         * 尽管tos字段只需要1个字节，但是我们仍旧要申请4字节
+         * Next element of search key (Type of Service) is indeed 1 byte long.
+         * Anyway we need to allocate all the 4 consecutive bytes for it.
          */
         {
             .type = RTE_ACL_FIELD_TYPE_BITMASK,
@@ -298,55 +304,63 @@ ACL库用于对具有多个类别的一组规则执行N元组搜索，并为每�
         },
     };
 
-典型实例如下：
+A typical example of such an IPv4 4-tuple rule is as follows:
 
 ::
 
     source addr/mask  destination addr/mask  tos/mask protocol/mask
     192.168.1.0/24    192.168.2.31/32        1/0xff   6/0xff
 
-任何IPv4报文，协议ID为6 (TCP)，源IP为192.168.1.[0-255]，目的IP为192.168.2.31，ToS 为1都匹配该规则。
+Any IPv4 packets with protocol ID 6 (TCP), source address 192.168.1.[0-255], destination address 192.168.2.31,
+ToS 1 matches the above rule.
 
-当创建一组规则时，对于每个规则，还必须提供附加信息：
+When creating a set of rules, for each rule, additional information must be supplied also:
 
-*   **priority**: 衡量规则优先级的权重值，该值越大，优先级越高。
-    如果输入元组匹配多个规则，则返回优先级较高的规则。
-    请注意，如果输入元组匹配多于一个规则，并且这些规则具有相同的优先级，则未定义哪个规则作为匹配返回。
-    建议为每个规则分配唯一的优先级。
+*   **priority**: A weight to measure the priority of the rules (higher is better).
+    If the input tuple matches more than one rule, then the rule with the higher priority is returned.
+    Note that if the input tuple matches more than one rule and these rules have equal priority,
+    it is undefined which rule is returned as a match.
+    It is recommended to assign a unique priority for each rule.
 
-*   **category_mask**: 每个规则使用位掩码值来选择规则的相关类别。
-    当执行查找时，返回每个类别的结果。
-    如果例如有四个不同的ACL规则集，一个用于访问控制，一个用于路由等，则通过使单个搜索能够返回多个结果来有效地提供“并行查找”。
-    每个集合可以被分配自己的类别，并且通过将它们组合成单个数据库，一个查找返回四个集合中的每一个的结果。
+*   **category_mask**: Each rule uses a bit mask value to select the relevant category(s) for the rule.
+    When a lookup is performed, the result for each category is returned.
+    This effectively provides a "parallel lookup" by enabling a single search to return multiple results if,
+    for example, there were four different sets of ACL rules, one for access control, one for routing, and so on.
+    Each set could be assigned its own category and by combining them into a single database,
+    one lookup returns a result for each of the four sets.
 
-*   **userdata**: 用户定义的数值。
-    对于每个类别，成功匹配返回最高优先级匹配规则的userdata字段。当没有规则匹配时，返回值为零。
+*   **userdata**: A user-defined value.
+    For each category, a successful match returns the userdata field of the highest priority matched rule.
+    When no rules match, returned value is zero.
 
 .. note::
 
-    将新规则添加到ACL上下文中时，所有字段必须是主机字节顺序（LSB）。
-    当为输入元组执行搜索时，该元组中的所有字段必须是网络字节顺序（MSB）。
+    When adding new rules into an ACL context, all fields must be in host byte order (LSB).
+    When the search is performed for an input tuple, all fields in that tuple must be in network byte order (MSB).
 
-RT 内存大小限制
-~~~~~~~~~~~~~~~~~
+RT memory size limit
+~~~~~~~~~~~~~~~~~~~~
 
-构建阶段 (rte_acl_build()) 为给定的一组规则创建内部结构以供运行时遍历。
-当前的实现是一组多分枝树，分枝为8.
-根据规则集，可能会消耗大量的内存。
-为了节省一些空间，ACL构建过程尝试将给定的规则集拆分为几个不相交的子集，并为每个子集构建一个单独的trie。
-根据规则集，它可能会减少RT内存需求，但可能会增加分类时间。
-在构建时有可能为给定的AC上下文指定内部RT结构的最大内存限制。
-可以通过 **rte_acl_config** 结构的 **max_size** 字段来完成。
-将其设置为大于0的值以指示 rte_acl_build() ：
+Build phase (rte_acl_build()) creates for a given set of rules internal structure for further run-time traversal.
+With current implementation it is a set of multi-bit tries (with stride == 8).
+Depending on the rules set, that could consume significant amount of memory.
+In attempt to conserve some space ACL build process tries to split the given
+rule-set into several non-intersecting subsets and construct a separate trie
+for each of them.
+Depending on the rule-set, it might reduce RT memory requirements but might
+increase classification time.
+There is a possibility at build-time to specify maximum memory limit for internal RT structures for given AC context.
+It could be done via **max_size** field of the **rte_acl_config** structure.
+Setting it to the value greater than zero, instructs rte_acl_build() to:
 
-*   尝试最小化RT表中的尝试次数，但是
-*   确保RT表的大小不会超过给定值。
+*   attempt to minimize number of tries in the RT table, but
+*   make sure that size of RT table wouldn't exceed given value.
 
-将其设置为零可使rte_acl_build（）使用默认行为：尝试最小化RT结构的大小，但不会暴露任何硬限制。
+Setting it to zero makes rte_acl_build() to use the default behavior:
+try to minimize size of the RT structures, but doesn't expose any hard limit on it.
 
-这使用户能够对性能/空间权衡做出决定。
-
-例如：
+That gives the user the ability to decisions about performance/space trade-off.
+For example:
 
 .. code-block:: c
 
@@ -374,37 +388,34 @@ RT 内存大小限制
 
 
 
-Classification 方法
+Classification methods
 ~~~~~~~~~~~~~~~~~~~~~~
 
-在给定的AC上下文成功完成rte_acl_build()之后，它可以用于执行分类 - 搜索比输入数据高优先级的规则。
+After rte_acl_build() over given AC context has finished successfully, it can be used to perform classification - search for a rule with highest priority over the input data.
+There are several implementations of classify algorithm:
 
-有几种分类算法实现：
+*   **RTE_ACL_CLASSIFY_SCALAR**: generic implementation, doesn't require any specific HW support.
 
-*   **RTE_ACL_CLASSIFY_SCALAR**: 通用实现，不需要任何特殊的硬件支持
+*   **RTE_ACL_CLASSIFY_SSE**: vector implementation, can process up to 8 flows in parallel. Requires SSE 4.1 support.
 
-*   **RTE_ACL_CLASSIFY_SSE**: vector实现，可以实现8条流并行，需要 SSE 4.1 支持
+*   **RTE_ACL_CLASSIFY_AVX2**: vector implementation, can process up to 16 flows in parallel. Requires AVX2 support.
 
-*   **RTE_ACL_CLASSIFY_AVX2**: vector实现，可以实现16条流并行，需要 AVX2 支持
+It is purely a runtime decision which method to choose, there is no build-time difference.
+All implementations operates over the same internal RT structures and use similar principles. The main difference is that vector implementations can manually exploit IA SIMD instructions and process several input data flows in parallel.
+At startup ACL library determines the highest available classify method for the given platform and sets it as default one. Though the user has an ability to override the default classifier function for a given ACL context or perform particular search using non-default classify method. In that case it is user responsibility to make sure that given platform supports selected classify implementation.
 
-纯粹是运行时决定哪种方法来选择，没有建立时间的差异。
-所有实现都在相同的内部RT结构上运行，并使用类似的原理。
-主要区别在于矢量实现可以手动利用IA SIMD指令并并行处理多个输入数据流。
-在启动时，ACL库确定给定平台的最高可用分类方法，并将其设置为默认的。
-虽然用户有能力覆盖给定ACL上下文的默认分类器功能，或使用非默认分类方法执行特定搜索。
-在这种情况下，用户有责任确保给定的平台支持选定的分类实现。
-
-API用法
----------
+Application Programming Interface (API) Usage
+---------------------------------------------
 
 .. note::
 
-    关于 Access Control API 的更多纤细信息，请参考 *DPDK API Reference* 。
+    For more details about the Access Control API, please refer to the *DPDK API Reference*.
 
-以下示例演示了更详细的多个类别的上面定义的规则的IPv4，5元组分类。
+The following example demonstrates IPv4, 5-tuple classification for rules defined above
+with multiple categories in more detail.
 
-多类别报文分类
-~~~~~~~~~~~~~~~~~
+Classify with Multiple Categories
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: c
 
@@ -504,7 +515,8 @@ API用法
        /* handle error at build runtime structures for ACL context. */
     }
 
-对于源IP地址：10.1.1.1和目标IP地址：192.168.1.15的元组，一旦执行如下操作：
+For a tuple with source IP address: 10.1.1.1 and destination IP address: 192.168.1.15,
+once the following lines are executed:
 
 .. code-block:: c
 
@@ -512,20 +524,23 @@ API用法
 
     rte_acl_classify(acx, data, results, 1, 4);
 
-
-结果数组包含：
+then the results[] array contains:
 
 .. code-block:: c
 
     results[4] = {2, 3, 0, 0};
 
-*   对于类别0，规则1和2都匹配，但规则2具有较高的优先级，因此[0]包含规则2的用户数据。
+*   For category 0, both rules 1 and 2 match, but rule 2 has higher priority,
+    therefore results[0] contains the userdata for rule 2.
 
-*   对于类别1，规则1和3都匹配，但规则3具有较高的优先级，因此[1]包含规则3的用户数据。
+*   For category 1, both rules 1 and 3 match, but rule 3 has higher priority,
+    therefore results[1] contains the userdata for rule 3.
 
-*   对于类别2和3，没有匹配，结果[2]和结果[3]包含零，这表明没有找到匹配的那些类别。
+*   For categories 2 and 3, there are no matches, so results[2] and results[3] contain zero,
+    which indicates that no matches were found for those categories.
 
-对于源IP地址为192.168.1.1和目标IP地址：192.168.2.11的元组，一旦执行：
+For a tuple with source IP address: 192.168.1.1 and destination IP address: 192.168.2.11,
+once the following lines are executed:
 
 .. code-block:: c
 
@@ -533,29 +548,30 @@ API用法
 
     rte_acl_classify(acx, data, results, 1, 4);
 
-结果数组包含：
+the results[] array contains:
 
 .. code-block:: c
 
     results[4] = {1, 1, 0, 0};
 
-*   对于0和1类，只有规则1匹配。
+*   For categories 0 and 1, only rule 1 matches.
 
-*   对于类别2和3，没有匹配。
+*   For categories 2 and 3, there are no matches.
 
-对于源IP地址：10.1.1.1和目标IP地址：201.212.111.12的元组，一旦执行：
+For a tuple with source IP address: 10.1.1.1 and destination IP address: 201.212.111.12,
+once the following lines are executed:
 
 .. code-block:: c
 
     uint32_t results[4]; /* make classify by 4 categories. */
     rte_acl_classify(acx, data, results, 1, 4);
 
-结果数组包含：
+the results[] array contains:
 
 .. code-block:: c
 
     results[4] = {0, 3, 0, 0};
 
-*   对于类别1，只有规则3匹配。
+*   For category 1, only rule 3 matches.
 
-*   对于0,2和3类，没有匹配。
+*   For categories 0, 2 and 3, there are no matches.

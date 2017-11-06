@@ -28,351 +28,404 @@
     (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
     OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-报文框架
-==========
+Packet Framework
+================
 
-设计目标
-----------
+Design Objectives
+-----------------
 
-DPDK数据包框架的主要设计目标是：
+The main design objectives for the DPDK Packet Framework are:
 
-*   提供标准方法来构建复杂的数据包处理流水线。
-    为常用的流水线功能模块提供可重复使用和可扩展的模板；
+*   Provide standard methodology to build complex packet processing pipelines.
+    Provide reusable and extensible templates for the commonly used pipeline functional blocks;
 
-*   提供在同一流水线功能模块上在纯软件和硬件加速实现之间的切换能力；
+*   Provide capability to switch between pure software and hardware-accelerated implementations for the same pipeline functional block;
 
-*   提供灵活性和高性能之间的最佳权衡。
-    硬编码流水线通常提供最佳性能，但是不够灵活，而开发灵活的框架通常性能又较低；
+*   Provide the best trade-off between flexibility and performance.
+    Hardcoded pipelines usually provide the best performance, but are not flexible,
+    while developing flexible frameworks is never a problem, but performance is usually low;
 
-*   提供一个逻辑上类似于Open Flow的框架。
+*   Provide a framework that is logically similar to Open Flow.
 
-概述
-------
+Overview
+--------
 
-报文处理应用程序通常被设计为多级流水线，每个阶段的逻辑围绕查找表进行。
-对于每个传入的数据包，查找表定义了要应用于数据包的一组操作，以及数据包处理的下一个阶段。
+Packet processing applications are frequently structured as pipelines of multiple stages,
+with the logic of each stage glued around a lookup table.
+For each incoming packet, the table defines the set of actions to be applied to the packet,
+as well as the next stage to send the packet to.
 
-DPDK数据包框架通过定义流水线开发的标准方法，以及为常用的流水线模块提供可重用的模板库来最大限度地减少
-构建数据包流水线所需要的开发工作量。
+The DPDK Packet Framework minimizes the development effort required to build packet processing pipelines
+by defining a standard methodology for pipeline development,
+as well as providing libraries of reusable templates for the commonly used pipeline blocks.
 
-将一组输入端口和一组输出端口通过树形拓扑中的一组查找表来连接以构成流水线。
-作为当前报文查找表的查找结果，其中一个表条目（查找命中）或默认条目（查找缺失）提供了要对当前数据包应用的一组操作，
-以及数据包的下一跳，可以是另一个表，输出端口或者是丢弃报文。
+The pipeline is constructed by connecting the set of input ports with the set of output ports
+through the set of tables in a tree-like topology.
+As result of lookup operation for the current packet in the current table,
+one of the table entries (on lookup hit) or the default table entry (on lookup miss)
+provides the set of actions to be applied on the current packet,
+as well as the next hop for the packet, which can be either another table, an output port or packet drop.
 
-数据包处理流程的一个例子如下 :numref:`figure_figure32`:
+An example of packet processing pipeline is presented in :numref:`figure_figure32`:
 
 .. _figure_figure32:
 
 .. figure:: img/figure32.*
 
-   输入端口0和1通过表0和表1与输出端口0，1和2连接的数据包流水线示例
+   Example of Packet Processing Pipeline where Input Ports 0 and 1
+   are Connected with Output Ports 0, 1 and 2 through Tables 0 and 1
 
-端口库设计
-------------
 
-端口类型
+Port Library Design
+-------------------
+
+Port Types
 ~~~~~~~~~~
 
-:numref:`table_qos_19` 是可以使用Packet Framework实现的端口的非穷尽列表。
+:numref:`table_qos_19` is a non-exhaustive list of ports that can be implemented with the Packet Framework.
 
 .. _table_qos_19:
 
-.. table:: 端口类型
+.. table:: Port Types
 
    +---+------------------+---------------------------------------------------------------------------------------+
-   | # | 端口类型         | 描述                                                                                  |
+   | # | Port type        | Description                                                                           |
    |   |                  |                                                                                       |
    +===+==================+=======================================================================================+
-   | 1 | SW ring          | 软件环形缓冲区用于应用程序之间的消息传递。使用DPDK的rte_ring。可能也是最常用的port类型|
+   | 1 | SW ring          | SW circular buffer used for message passing between the application threads. Uses     |
+   |   |                  | the DPDK rte_ring primitive. Expected to be the most commonly used type of            |
+   |   |                  | port.                                                                                 |
    |   |                  |                                                                                       |
    +---+------------------+---------------------------------------------------------------------------------------+
-   | 2 | HW ring          | 用于与NIC、交换机或加速端口交互的缓冲区描述符队列。对于NIC端口，它使用rte_eth_rx_queue|
-   |   |                  | 或者rte_eth_tx_queue                                                                  |
+   | 2 | HW ring          | Queue of buffer descriptors used to interact with NIC, switch or accelerator ports.   |
+   |   |                  | For NIC ports, it uses the DPDK rte_eth_rx_queue or rte_eth_tx_queue                  |
+   |   |                  | primitives.                                                                           |
    |   |                  |                                                                                       |
    +---+------------------+---------------------------------------------------------------------------------------+
-   | 3 | IP reassembly    | 输入数据包是完整的数据报或者片段。输出数据包则是完整的IP数据报。                      |
+   | 3 | IP reassembly    | Input packets are either IP fragments or complete IP datagrams. Output packets are    |
+   |   |                  | complete IP datagrams.                                                                |
    |   |                  |                                                                                       |
    +---+------------------+---------------------------------------------------------------------------------------+
-   | 4 | IP fragmentation | 输入数据包是Jumbo帧 (IP 数据报，长度大于 MTU) 或者非Jumbo帧。输出数据包是非Jumbo帧。  |
+   | 4 | IP fragmentation | Input packets are jumbo (IP datagrams with length bigger than MTU) or non-jumbo       |
+   |   |                  | packets. Output packets are non-jumbo packets.                                        |
    |   |                  |                                                                                       |
    +---+------------------+---------------------------------------------------------------------------------------+
-   | 5 | Traffic manager  | 连接到特定NIC输出端口的流量管理器，根据预定义的SLA执行拥塞管理和分级调度。            |
+   | 5 | Traffic manager  | Traffic manager attached to a specific NIC output port, performing congestion         |
+   |   |                  | management and hierarchical scheduling according to pre-defined SLAs.                 |
    |   |                  |                                                                                       |
    +---+------------------+---------------------------------------------------------------------------------------+
-   | 6 | KNI              | 接收/发送数据包到/从Linux内核空间                                                     |
+   | 6 | KNI              | Send/receive packets to/from Linux kernel space.                                      |
    |   |                  |                                                                                       |
    +---+------------------+---------------------------------------------------------------------------------------+
-   | 7 | Source           | 输入端口用作数据包生成器。 类似于Linux内核 /dev/zero 设备                             |
+   | 7 | Source           | Input port used as packet generator. Similar to Linux kernel /dev/zero character      |
+   |   |                  | device.                                                                               |
    |   |                  |                                                                                       |
    +---+------------------+---------------------------------------------------------------------------------------+
-   | 8 | Sink             | 输出端口，用于删除所有的输入数据包。类似于Linux内核的 /dev/null 字符设备。            |
+   | 8 | Sink             | Output port used to drop all input packets. Similar to Linux kernel /dev/null         |
+   |   |                  | character device.                                                                     |
    |   |                  |                                                                                       |
    +---+------------------+---------------------------------------------------------------------------------------+
 
-端口操作
-~~~~~~~~~~~
+Port Interface
+~~~~~~~~~~~~~~
 
-每个端口是单向的，即输入端口或输出端口。
-需要每个输入/输出端口来实现定义端口的初始化和运行时操作的抽象接口。
-端口抽象接口描述于
+Each port is unidirectional, i.e. either input port or output port.
+Each input/output port is required to implement an abstract interface that
+defines the initialization and run-time operation of the port.
+The port abstract interface is described in.
 
 .. _table_qos_20:
 
-.. table:: 20 端口抽象接口
+.. table:: 20 Port Abstract Interface
 
    +---+----------------+-----------------------------------------------------------------------------------------+
-   | # | 端口操作       | 描述                                                                                    |
+   | # | Port Operation | Description                                                                             |
    |   |                |                                                                                         |
    +===+================+=========================================================================================+
-   | 1 | Create         | 创建低级端口对象 (如，队列)，可以内部分配内存。                                         |
+   | 1 | Create         | Create the low-level port object (e.g. queue). Can internally allocate memory.          |
    |   |                |                                                                                         |
    +---+----------------+-----------------------------------------------------------------------------------------+
-   | 2 | Free           | 释放低级端口对象使用的资源 (如，内存)                                                   |
+   | 2 | Free           | Free the resources (e.g. memory) used by the low-level port object.                     |
    |   |                |                                                                                         |
    +---+----------------+-----------------------------------------------------------------------------------------+
-   | 3 | RX             | 读取一串输入数据包。只有输入端口才有这个操作。                                          |
+   | 3 | RX             | Read a burst of input packets. Non-blocking operation. Only defined for input ports.    |
    |   |                |                                                                                         |
    +---+----------------+-----------------------------------------------------------------------------------------+
-   | 4 | TX             | 写一串输入数据包。非阻塞操作，只有输出端口有这个操作。                                  |
+   | 4 | TX             | Write a burst of input packets. Non-blocking operation. Only defined for output ports.  |
    |   |                |                                                                                         |
    +---+----------------+-----------------------------------------------------------------------------------------+
-   | 5 | Flush          | 刷新输出缓冲区，只有输出端口有这个操作。                                                |
+   | 5 | Flush          | Flush the output buffer. Only defined for output ports.                                 |
    |   |                |                                                                                         |
    +---+----------------+-----------------------------------------------------------------------------------------+
 
-表库设计
-----------
+Table Library Design
+--------------------
 
-表类型
-~~~~~~~~~
+Table Types
+~~~~~~~~~~~
 
-:numref:`table_qos_21` 是可以用Packet Framework实现的表类型的非穷举列表。
+:numref:`table_qos_21` is a non-exhaustive list of types of tables that can be implemented with the Packet Framework.
 
 .. _table_qos_21:
 
-.. table:: 表类型
+.. table:: Table Types
 
    +---+----------------------------+-----------------------------------------------------------------------------+
-   | # | 表类型                     | 描述                                                                        |
+   | # | Table Type                 | Description                                                                 |
    |   |                            |                                                                             |
    +===+============================+=============================================================================+
-   | 1 | Hash table                 | 查找关键字是n-元组。                                                        |
+   | 1 | Hash table                 | Lookup key is n-tuple based.                                                |
    |   |                            |                                                                             |
-   |   |                            | 通常，查找key使用哈希算法以产生用于标识查找结果的索引值。                   |
+   |   |                            | Typically, the lookup key is hashed to produce a signature that is used to  |
+   |   |                            | identify a bucket of entries where the lookup key is searched next.         |
    |   |                            |                                                                             |
-   |   |                            | 与每个数据包查找关键字相关的数据可以从数据包中读取（预先计算的），          |
-   |   |                            | 或者在表查找时计算。                                                        |
+   |   |                            | The signature associated with the lookup key of each input packet is either |
+   |   |                            | read from the packet descriptor (pre-computed signature) or computed at     |
+   |   |                            | table lookup time.                                                          |
    |   |                            |                                                                             |
-   |   |                            | 表查找、添加条目和删除条目操作，以及预先计算Key的任何流水线模块             |
-   |   |                            | 都必须使用相同的哈希算法。                                                  |
+   |   |                            | The table lookup, add entry and delete entry operations, as well as any     |
+   |   |                            | other pipeline block that pre-computes the signature all have to use the    |
+   |   |                            | same hashing algorithm to generate the signature.                           |
    |   |                            |                                                                             |
-   |   |                            | 哈希表通常用于实现流分类表、ARP缓存、隧道协议路由表等。                     |
-   |   |                            |                                                                             |
-   +---+----------------------------+-----------------------------------------------------------------------------+
-   | 2 | Longest Prefix Match (LPM) | 查找键值是IP地址。                                                          |
-   |   |                            |                                                                             |
-   |   |                            | 表中的每个条目具有一个相关联的IP前缀。                                      |
-   |   |                            |                                                                             |
-   |   |                            | 表查找操作选择由查找键值匹配的IP前缀；在多个匹配的情况下，具有              |
-   |   |                            | 最长前缀匹配的条目获胜。                                                    |
-   |   |                            |                                                                             |
-   |   |                            | 通常用于实现IP路由表。                                                      |
+   |   |                            | Typically used to implement flow classification tables, ARP caches, routing |
+   |   |                            | table for tunnelling protocols, etc.                                        |
    |   |                            |                                                                             |
    +---+----------------------------+-----------------------------------------------------------------------------+
-   | 3 | Access Control List (ACLs) | 查找键值是7-元组，包括两个 VLAN/MPLS 标签，目的IP，源IP，L4协议，           |
-   |   |                            | L4目的端口，L4源端口。                                                      |
+   | 2 | Longest Prefix Match (LPM) | Lookup key is the IP address.                                               |
    |   |                            |                                                                             |
-   |   |                            | 每个表条目具有相关联的ACL优先级。ACL包含VLAN/ MPLS标签的位掩码，            |
-   |   |                            | IP目的地址的IP前缀，IP源地址的IP前缀，L4协议和位掩码，L4目的端              |
-   |   |                            | 口和位掩码，L4源端口和位掩码。                                              |
+   |   |                            | Each table entries has an associated IP prefix (IP and depth).              |
    |   |                            |                                                                             |
-   |   |                            | 表查找操作选择与查找键匹配的ACL; 在多个匹配的情况下，优先级最高             |
-   |   |                            | 的条目胜出。                                                                |
-   |   |                            | 通常用于实现防火墙等规则数据库。                                            |
+   |   |                            | The table lookup operation selects the IP prefix that is matched by the     |
+   |   |                            | lookup key; in case of multiple matches, the entry with the longest prefix  |
+   |   |                            | depth wins.                                                                 |
+   |   |                            |                                                                             |
+   |   |                            | Typically used to implement IP routing tables.                              |
    |   |                            |                                                                             |
    +---+----------------------------+-----------------------------------------------------------------------------+
-   | 4 | Pattern matching search    | 查找键值为报文负载。                                                        |
+   | 3 | Access Control List (ACLs) | Lookup key is 7-tuple of two VLAN/MPLS labels, IP destination address,      |
+   |   |                            | IP source addresses, L4 protocol, L4 destination port, L4 source port.      |
    |   |                            |                                                                             |
-   |   |                            | 表示一个模式数据库，每个模式都有一个相关联的优先级。                        |
+   |   |                            | Each table entry has an associated ACL and priority. The ACL contains bit   |
+   |   |                            | masks for the VLAN/MPLS labels, IP prefix for IP destination address, IP    |
+   |   |                            | prefix for IP source addresses, L4 protocol and bitmask, L4 destination     |
+   |   |                            | port and bit mask, L4 source port and bit mask.                             |
    |   |                            |                                                                             |
-   |   |                            | 表查找操作选择与输入报文匹配的模式，在多个匹配的情况下，最高优              |
-   |   |                            | 先级匹配胜出                                                                |
+   |   |                            | The table lookup operation selects the ACL that is matched by the lookup    |
+   |   |                            | key; in case of multiple matches, the entry with the highest priority wins. |
+   |   |                            |                                                                             |
+   |   |                            | Typically used to implement rule databases for firewalls, etc.              |
+   |   |                            |                                                                             |
    +---+----------------------------+-----------------------------------------------------------------------------+
-   | 5 | Array                      | 查询键是表条目索引本身。                                                    |
+   | 4 | Pattern matching search    | Lookup key is the packet payload.                                           |
+   |   |                            |                                                                             |
+   |   |                            | Table is a database of patterns, with each pattern having a priority        |
+   |   |                            | assigned.                                                                   |
+   |   |                            |                                                                             |
+   |   |                            | The table lookup operation selects the patterns that is matched by the      |
+   |   |                            | input packet; in case of multiple matches, the matching pattern with the    |
+   |   |                            | highest priority wins.                                                      |
+   |   |                            |                                                                             |
+   +---+----------------------------+-----------------------------------------------------------------------------+
+   | 5 | Array                      | Lookup key is the table entry index itself.                                 |
    |   |                            |                                                                             |
    +---+----------------------------+-----------------------------------------------------------------------------+
 
-表操作接口
-~~~~~~~~~~~~~
+Table Interface
+~~~~~~~~~~~~~~~
 
-每个表都需要实现一个定义表的初始化和运行时操作的抽象接口。
-表的抽象接口如下所述 :numref:`table_qos_29_1`.
+Each table is required to implement an abstract interface that defines the initialization
+and run-time operation of the table.
+The table abstract interface is described in :numref:`table_qos_29_1`.
 
 .. _table_qos_29_1:
 
-.. table:: 表抽象接口
+.. table:: Table Abstract Interface
 
    +---+-----------------+----------------------------------------------------------------------------------------+
-   | # | 表操作          | 描述                                                                                   |
+   | # | Table operation | Description                                                                            |
    |   |                 |                                                                                        |
    +===+=================+========================================================================================+
-   | 1 | Create          | 创建查找表的低级数据结构。 可以内部分配内存。                                          |
+   | 1 | Create          | Create the low-level data structures of the lookup table. Can internally allocate      |
+   |   |                 | memory.                                                                                |
    |   |                 |                                                                                        |
    +---+-----------------+----------------------------------------------------------------------------------------+
-   | 2 | Free            | 释放查找表使用的所有资源。                                                             |
+   | 2 | Free            | Free up all the resources used by the lookup table.                                    |
    |   |                 |                                                                                        |
    +---+-----------------+----------------------------------------------------------------------------------------+
-   | 3 | Add entry       | 向查找表添加新条目。                                                                   |
+   | 3 | Add entry       | Add new entry to the lookup table.                                                     |
    |   |                 |                                                                                        |
    +---+-----------------+----------------------------------------------------------------------------------------+
-   | 4 | Delete entry    | 从查找表中删除特定条目。                                                               |
+   | 4 | Delete entry    | Delete specific entry from the lookup table.                                           |
    |   |                 |                                                                                        |
    +---+-----------------+----------------------------------------------------------------------------------------+
-   | 5 | Lookup          | 查找一组输入数据包，并返回一个指定每个数据包的查找操作结果的位掩码                     |
-   |   |                 | 一个位表示相应数据包的查找命中，而一个清除位被查找错过                                 |
+   | 5 | Lookup          | Look up a burst of input packets and return a bit mask specifying the result of the    |
+   |   |                 | lookup operation for each packet: a set bit signifies lookup hit for the corresponding |
+   |   |                 | packet, while a cleared bit a lookup miss.                                             |
    |   |                 |                                                                                        |
-   |   |                 | 对于每个查找命中数据包，查找操作也返回指向被命中的表条目的指针，                       |
-   |   |                 | 其中包含要应用于数据包的操作和任何关联的元数据。                                       |
+   |   |                 | For each lookup hit packet, the lookup operation also returns a pointer to the table   |
+   |   |                 | entry that was hit, which contains the actions to be applied on the packet and any     |
+   |   |                 | associated metadata.                                                                   |
    |   |                 |                                                                                        |
-   |   |                 | 对于每个查找缺失数据包，要应用于数据包的操作和任何关联的元数据由预先配置为             |
-   |   |                 | 查找缺失的默认表条目指定                                                               |
+   |   |                 | For each lookup miss packet, the actions to be applied on the packet and any           |
+   |   |                 | associated metadata are specified by the default table entry preconfigured for lookup  |
+   |   |                 | miss.                                                                                  |
    |   |                 |                                                                                        |
    +---+-----------------+----------------------------------------------------------------------------------------+
 
 
-哈希表设计
-~~~~~~~~~~~~
+Hash Table Design
+~~~~~~~~~~~~~~~~~
 
-哈希表概述
-^^^^^^^^^^^^
+Hash Table Overview
+^^^^^^^^^^^^^^^^^^^
 
-哈希表很重要，因为查找操作针对速度进行了优化：搜索操作仅限于表中的某个哈希桶，而不是在表中所有元素间进行线性查找。
+Hash tables are important because the key lookup operation is optimized for speed:
+instead of having to linearly search the lookup key through all the keys in the table,
+the search is limited to only the keys stored in a single table bucket.
 
-**关联数组**
+**Associative Arrays**
 
-关联数组是一个可以被指定为一组（键，值）对的函数，每个键最多可以存在一个可能的输入键集合。
-对于给定的一个关联数组，可能的操作如下：
+An associative array is a function that can be specified as a set of (key, value) pairs,
+with each key from the possible set of input keys present at most once.
+For a given associative array, the possible operations are:
 
-#.  *添加 (key, value)*: 当没有value与当前 *key*相关联时，(key, *value* ) 关联将被创建。
-    当 *key* 已经关联了 *value0*，那么 (*key*, *value0*) 将被移除，并重新创建关联 *(key, value)* 。
+#.  *add (key, value)*: When no value is currently associated with *key*, then the (key, *value* ) association is created.
+    When *key* is already associated value *value0*, then the association (*key*, *value0*) is removed
+    and association *(key, value)* is created;
 
-#.  *删除 key*: 假如当前没有value关联到 *key*，这个操作将不起作用。
-    当 *key* 已经关联了 *value*，那么 *(key, value)* 将被移除。
+#.  *delete key*: When no value is currently associated with *key*, this operation has no effect.
+    When *key* is already associated  *value*, then association  *(key, value)* is removed;
 
-#.  *查找 key*: 假如当前 *key*没有关联的value，那么这个操作返回查找缺失。
-    当 *key* 关联 *value*，那么这个操作将返回 *value*。
-    键值对 *(key, value)* 不做任何改变。
+#.  *lookup key*: When no value is currently associated with  *key*, then this operation returns void value (lookup miss).
+    When *key* is associated with *value*, then this operation returns *value*.
+    The *(key, value)* association is not changed.
 
-用于将输入key与关联数组中的key进行匹配的规则是 *精确匹配*，也就是说，key的大小及key值都必须精确匹配。
+The matching criterion used to compare the input key against the keys in the associative array is *exact match*,
+as the key size (number of bytes) and the key value (array of bytes) have to match exactly for the two keys under comparison.
 
-**哈希函数**
+**Hash Function**
 
-哈希函数确定性地将可变长度（密钥）的数据映射到固定大小的数据（散列值或密钥签名）。
-通常地，key的大小要大于散列值的大小。
-散列函数基本上将长key压缩成短哈希值。
-几个key可以共享相同的哈希值，这就是哈希碰撞（哈希冲突）。
+A hash function deterministically maps data of variable length (key) to data of fixed size (hash value or key signature).
+Typically, the size of the key is bigger than the size of the key signature.
+The hash function basically compresses a long key into a short signature.
+Several keys can share the same signature (collisions).
 
-高质量散列函数可以做到均匀分布。
-对于大量的key，当将哈希值的空间划分成固定数量的相等间隔（哈希桶）时，希望将哈希值均匀分布在这些间隔（均匀分布）上，而不是大多数哈希值 只分布在几个哈希桶中，其余的哈希桶在很大程度上没有使用（不均匀分布）。
+High quality hash functions have uniform distribution.
+For large number of keys, when dividing the space of signature values into a fixed number of equal intervals (buckets),
+it is desirable to have the key signatures evenly distributed across these intervals (uniform distribution),
+as opposed to most of the signatures going into only a few of the intervals
+and the rest of the intervals being largely unused (non-uniform distribution).
 
-**哈希表**
+**Hash Table**
 
-哈希表是使用散列函数进行操作的关联数组。
-使用散列函数的原因是通过最小化必须与输入键进行比较的表键的数量来优化查找操作的性能。
+A hash table is an associative array that uses a hash function for its operation.
+The reason for using a hash function is to optimize the performance of the lookup operation
+by minimizing the number of table keys that have to be compared against the input key.
 
-哈希表不是将(key, value)对存储在单个链表中，而是保留多个链表（哈希桶）。
-对于任意给定的key，存在单个哈希桶，并且该桶是基于key的哈希值唯一标识的。
-一旦计算了哈希值，并且标识了哈希桶，key或者位于该桶中，或者根本不存在哈希表中，因此，根据key搜索可以从当前哈希表中唯一确认一个值。
+Instead of storing the (key, value) pairs in a single list, the hash table maintains multiple lists (buckets).
+For any given key, there is a single bucket where that key might exist, and this bucket is uniquely identified based on the key signature.
+Once the key signature is computed and the hash table bucket identified,
+the key is either located in this bucket or it is not present in the hash table at all,
+so the key search can be narrowed down from the full set of keys currently in the table
+to just the set of keys currently in the identified table bucket.
 
-哈希表查找的性能大大提高，前提是哈希表均匀分布在各个哈希桶之间，这个可以使用均匀分布的哈希函数来实现。
-将key映射成哈希值的规则就是哈希函数，最简单的获取哈希桶的方式方式如下：
+The performance of the hash table lookup operation is greatly improved,
+provided that the table keys are evenly distributed among the hash table buckets,
+which can be achieved by using a hash function with uniform distribution.
+The rule to map a key to its bucket can simply be to use the key signature (modulo the number of table buckets) as the table bucket ID:
 
     *bucket_id = f_hash(key) % n_buckets;*
 
-通过选择桶的数量为2的幂，模运算符可以由按位AND逻辑来代替：
+By selecting the number of buckets to be a power of two, the modulo operator can be replaced by a bitwise AND logical operation:
 
     *bucket_id = f_hash(key) & (n_buckets - 1);*
 
-为了减少哈希冲突，需要增加哈希表中哈希桶的数目。
+considering *n_bits* as the number of bits set in *bucket_mask = n_buckets - 1*,
+this means that all the keys that end up in the same hash table bucket have the lower *n_bits* of their signature identical.
+In order to reduce the number of keys in the same bucket (collisions), the number of hash table buckets needs to be increased.
 
-在数据包处理上下文中，哈希表操作设计的操作顺序如下所示 :numref:`figure_figure33`:
+In packet processing context, the sequence of operations involved in hash table operations is described in :numref:`figure_figure33`:
 
 .. _figure_figure33:
 
 .. figure:: img/figure33.*
 
-   报文处理上下文中哈希表操作的步骤顺序
+   Sequence of Steps for Hash Table Operations in a Packet Processing Context
 
 
-哈希表用例
-^^^^^^^^^^^^
 
-**流分类**
+Hash Table Use Cases
+^^^^^^^^^^^^^^^^^^^^
 
-*描述:* 对于每个输入数据包，流分类至少执行一次。
-此操作将每个输入的数据包映射到通常包含数百万条流的流数据库中的某一条已知流上。
+**Flow Classification**
 
-*哈希表名称:* 流分类表
+*Description:* The flow classification is executed at least once for each input packet.
+This operation maps each incoming packet against one of the known traffic flows in the flow database that typically contains millions of flows.
 
-*keys 数目:* 百万个以上
+*Hash table name:* Flow classification table
 
-*Key 格式:* 报文字段n元组，用于唯一标识一条流/连接。
-例如: DiffServ 5元组(源IP地址、目的IP地址、L4协议、L4源端口、L4目的端口)。
-对于IPv4协议，且L4协议如TCP、UDP或者SCTP，DiffServ 5元组的大小是13B，对于IP6协议则是37B。
+*Number of keys:* Millions
 
-*Key 值:* 用于描述对当前流的报文应用什么样的处理动作和动作元数据。
-与每个业务流相关的数据大小可以从8B到1KB不等。
+*Key format:* n-tuple of packet fields that uniquely identify a traffic flow/connection.
+Example: DiffServ 5-tuple of (Source IP address, Destination IP address, L4 protocol, L4 protocol source port, L4 protocol destination port).
+For IPv4 protocol and L4 protocols like TCP, UDP or SCTP, the size of the DiffServ 5-tuple is 13 bytes, while for IPv6 it is 37 bytes.
 
-**ARP**
+*Key value (key data):* actions and action meta-data describing what processing to be applied for the packets of the current flow.
+The size of the data associated with each traffic flow can vary from 8 bytes to kilobytes.
 
-*描述:* 一旦IP数据包的路由找到，也就是说输出接口和下一个中继站的IP地址是已知的，那么就需要下一个中继站的MAC地址，以便将数据包发到下一站。
-下一跳的MAC地址成为输出以太网帧的目标MAC地址。
+**Address Resolution Protocol (ARP)**
 
-*哈希表名称:* ARP表
+*Description:* Once a route has been identified for an IP packet (so the output interface and the IP address of the next hop station are known),
+the MAC address of the next hop station is needed in order to send this packet onto the next leg of the journey
+towards its destination (as identified by its destination IP address).
+The MAC address of the next hop station becomes the destination MAC address of the outgoing Ethernet frame.
 
-*keys 数目:* 数千个
+*Hash table name:* ARP table
 
-*Key 格式:* 键值对(输出接口，下一跳IP地址)，通常IPv4是5B，IPv6是17B。
+*Number of keys:* Thousands
 
-*Key 值:* 下一跳MAC地址6B。
+*Key format:* The pair of (Output interface, Next Hop IP address), which is typically 5 bytes for IPv4 and 17 bytes for IPv6.
 
-哈希表类型
-^^^^^^^^^^^
+*Key value (key data):* MAC address of the next hop station (6 bytes).
 
-:numref:`table_qos_22` 列出了所有不同散列表类型共享的散列表配置参数。
+Hash Table Types
+^^^^^^^^^^^^^^^^
+
+:numref:`table_qos_22` lists the hash table configuration parameters shared by all different hash table types.
 
 .. _table_qos_22:
 
-.. table:: 所有散列表类型的通用配置参数
+.. table:: Configuration Parameters Common for All Hash Table Types
 
    +---+---------------------------+------------------------------------------------------------------------------+
-   | # | 参数                      | 描述                                                                         |
+   | # | Parameter                 | Details                                                                      |
    |   |                           |                                                                              |
    +===+===========================+==============================================================================+
-   | 1 | Key size                  | 按照字节数来衡量，所有的Key具有相同的大小。                                  |
+   | 1 | Key size                  | Measured as number of bytes. All keys have the same size.                    |
    |   |                           |                                                                              |
    +---+---------------------------+------------------------------------------------------------------------------+
-   | 2 | Key value (key data) size | 按照字节数来衡量                                                             |
+   | 2 | Key value (key data) size | Measured as number of bytes.                                                 |
    |   |                           |                                                                              |
    +---+---------------------------+------------------------------------------------------------------------------+
-   | 3 | Number of buckets         | 必须是2的幂次.                                                               |
+   | 3 | Number of buckets         | Needs to be a power of two.                                                  |
    |   |                           |                                                                              |
    +---+---------------------------+------------------------------------------------------------------------------+
-   | 4 | Maximum number of keys    | 必须是2的幂次.                                                               |
+   | 4 | Maximum number of keys    | Needs to be a power of two.                                                  |
    |   |                           |                                                                              |
    +---+---------------------------+------------------------------------------------------------------------------+
-   | 5 | Hash function             | 如: jhash, CRC hash, etc.                                                    |
+   | 5 | Hash function             | Examples: jhash, CRC hash, etc.                                              |
    |   |                           |                                                                              |
    +---+---------------------------+------------------------------------------------------------------------------+
-   | 6 | Hash function seed        | 传递给哈希函数的参数。                                                       |
+   | 6 | Hash function seed        | Parameter to be passed to the hash function.                                 |
    |   |                           |                                                                              |
    +---+---------------------------+------------------------------------------------------------------------------+
-   | 7 | Key offset                | 存储在分组缓冲器中的分组元数据内的查找键字节阵列的偏移。                     |
+   | 7 | Key offset                | Offset of the lookup key byte array within the packet meta-data stored in    |
+   |   |                           | the packet buffer.                                                           |
    |   |                           |                                                                              |
    +---+---------------------------+------------------------------------------------------------------------------+
 
-哈希桶溢出问题
-"""""""""""""""""
+Bucket Full Problem
+"""""""""""""""""""
 
 On initialization, each hash table bucket is allocated space for exactly 4 keys.
 As keys are added to the table, it can happen that a given bucket already has 4 keys when a new key has to be added to this bucket.

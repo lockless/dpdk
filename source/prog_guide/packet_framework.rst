@@ -374,141 +374,110 @@ DPDK数据包框架通过定义流水线开发的标准方法，以及为常用�
 哈希桶溢出问题
 """""""""""""""""
 
-On initialization, each hash table bucket is allocated space for exactly 4 keys.
-As keys are added to the table, it can happen that a given bucket already has 4 keys when a new key has to be added to this bucket.
-The possible options are:
+在初始化时，为每个哈希表的桶分配4个keys的空间。
+随着keys被添加到哈希表中，可能出现某个哈希桶中已经有4个keys的情况。
+可以使用的方法有：
 
-#.  **Least Recently Used (LRU) Hash Table.**
-    One of the existing keys in the bucket is deleted and the new key is added in its place.
-    The number of keys in each bucket never grows bigger than 4. The logic to pick the key to be dropped from the bucket is LRU.
-    The hash table lookup operation maintains the order in which the keys in the same bucket are hit, so every time a key is hit,
-    it becomes the new Most Recently Used (MRU) key, i.e. the last candidate for drop.
-    When a key is added to the bucket, it also becomes the new MRU key.
-    When a key needs to be picked and dropped, the first candidate for drop, i.e. the current LRU key, is always picked.
-    The LRU logic requires maintaining specific data structures per each bucket.
+#.  **LRU哈希表**
+    哈希桶中现有的key之一将被删除以添加新的key到他的位置。
+    每个哈希桶中的key数目不会超过4个。选择要丢弃的key的规则是LRU。
+    哈希表查找操作维护同一个哈希桶中不同key命中的顺序，所以，每当命中key时，该key就成为最近使用的key（MRU），因此LRU的key通常在链表尾部。
+    当一个key被添加到哈希桶中时，它也成为新的MRU。
+    当需要选取和丢弃一个key时，第一个丢弃候选者，即当前的LRU Key总是被挑选出来丢弃。
+    LRU逻辑需要维护每个桶的特殊数据结构。
 
-#.  **Extendable Bucket Hash Table.**
-    The bucket is extended with space for 4 more keys.
-    This is done by allocating additional memory at table initialization time,
-    which is used to create a pool of free keys (the size of this pool is configurable and always a multiple of 4).
-    On key add operation, the allocation of a group of 4 keys only happens successfully within the limit of free keys,
-    otherwise the key add operation fails.
-    On key delete operation, a group of 4 keys is freed back to the pool of free keys
-    when the key to be deleted is the only key that was used within its group of 4 keys at that time.
-    On key lookup operation, if the current bucket is in extended state and a match is not found in the first group of 4 keys,
-    the search continues beyond the first group of 4 keys, potentially until all keys in this bucket are examined.
-    The extendable bucket logic requires maintaining specific data structures per table and per each bucket.
+#.  **可扩展桶的哈希表.**
+    哈希桶可以扩展空间，以存储4个以上的key。
+    这是通过在表初始化时分配额外的内存来实现的，这个内存用于创建一个空闲的key池（这个池的大小可配置，总是是4的倍数）。
+    在添加key操作中，可以分配一组（4个key）的空间，如果空间不足，则添加失败。
+    在删除key操作中，当要删除的key是一组4个key中唯一使用的key时，将密钥删除，并将这组空间释放回key池。
+    在查找key操作中，如果当前存储的哈希桶处于扩展状态，并且在第一组4个key中找不到匹配项，则搜索将在后续的key中继续进行，知道桶中所有的key都被检查。
+    可扩展桶的哈希表需要维护每个表和每个存储哈希桶的特定数据结构。
 
 .. _table_qos_23:
 
-.. table:: Configuration Parameters Specific to Extendable Bucket Hash Table
+.. table:: 可扩展桶散列表特定的配置参数
 
    +---+---------------------------+--------------------------------------------------+
    | # | Parameter                 | Details                                          |
    |   |                           |                                                  |
    +===+===========================+==================================================+
-   | 1 | Number of additional keys | Needs to be a power of two, at least equal to 4. |
+   | 1 | Number of additional keys | 需要是2的幂次，至少是4                           |
    |   |                           |                                                  |
    +---+---------------------------+--------------------------------------------------+
 
 
-Signature Computation
-"""""""""""""""""""""
+哈希值计算
+""""""""""""
 
-The possible options for key signature computation are:
+哈希值计算的可用方法包括：
 
-#.  **Pre-computed key signature.**
-    The key lookup operation is split between two CPU cores.
-    The first CPU core (typically the CPU core that performs packet RX) extracts the key from the input packet,
-    computes the key signature and saves both the key and the key signature in the packet buffer as packet meta-data.
-    The second CPU core reads both the key and the key signature from the packet meta-data
-    and performs the bucket search step of the key lookup operation.
+#.  **预选计算的哈希值**
+    Key查找操作被拆分到两个cpu core上。
+    第一个cpu core（通常是执行数据包接收的cpu core）从输入数据包中提取key，计算哈希值，并肩key和哈希值保存在接受数据包的缓冲区中作为数据包元数据。
+    第二个cpu core从数据包元数据中读取key和哈希值，并执行key查找操作。
 
-#.  **Key signature computed on lookup ("do-sig" version).**
-    The same CPU core reads the key from the packet meta-data, uses it to compute the key signature
-    and also performs the bucket search step of the key lookup operation.
+#.  **查找过程中计算的哈希值**
+    相同的cpu core从数据包元数据中读取key，用它来计算哈希值，并执行key查找操作。
 
 .. _table_qos_24:
 
-.. table:: Configuration Parameters Specific to Pre-computed Key Signature Hash Table
+.. table:: 预先计算哈希值的哈希表配置参数
 
    +---+------------------+-----------------------------------------------------------------------+
    | # | Parameter        | Details                                                               |
    |   |                  |                                                                       |
    +===+==================+=======================================================================+
-   | 1 | Signature offset | Offset of the pre-computed key signature within the packet meta-data. |
+   | 1 | Signature offset | 数据包元数据内预先计算的哈希值的偏移                                  |
    |   |                  |                                                                       |
    +---+------------------+-----------------------------------------------------------------------+
 
-Key Size Optimized Hash Tables
-""""""""""""""""""""""""""""""
+Key大小优化的哈希表
+"""""""""""""""""""""
 
-For specific key sizes, the data structures and algorithm of key lookup operation can be specially handcrafted for further performance improvements,
-so following options are possible:
+对于特定的key大小，key查找操作的数据结构和算法可以进行特殊的处理，以进一步提高性能，因此有如下选项：
 
-#.  **Implementation supporting configurable key size.**
+#.  **支持可配置密钥大小的实现**
 
-#.  **Implementation supporting a single key size.**
-    Typical key sizes are 8 bytes and 16 bytes.
+#.  **实现支持单个密钥大小**
+    通常key大小为8B或者16B。
 
-Bucket Search Logic for Configurable Key Size Hash Tables
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+可配置Key大小的哈希表查找操作
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The performance of the bucket search logic is one of the main factors influencing the performance of the key lookup operation.
-The data structures and algorithm are designed to make the best use of Intel CPU architecture resources like:
-cache memory space, cache memory bandwidth, external memory bandwidth, multiple execution units working in parallel,
-out of order instruction execution, special CPU instructions, etc.
+哈希桶搜索的性能是影响key查找的最要因素之一。
+数据结构和算法旨在充分利用Intel CPU架构资源如：缓冲区存储结构，缓冲区存储带宽，外部存储器带宽，并行工作的多个执行单元，无序指令执行，特殊CPU指令等等。
 
-The bucket search logic handles multiple input packets in parallel.
-It is built as a pipeline of several stages (3 or 4), with each pipeline stage handling two different packets from the burst of input packets.
-On each pipeline iteration, the packets are pushed to the next pipeline stage: for the 4-stage pipeline,
-two packets (that just completed stage 3) exit the pipeline,
-two packets (that just completed stage 2) are now executing stage 3, two packets (that just completed stage 1) are now executing stage 2,
-two packets (that just completed stage 0) are now executing stage 1 and two packets (next two packets to read from the burst of input packets)
-are entering the pipeline to execute stage 0.
-The pipeline iterations continue until all packets from the burst of input packets execute the last stage of the pipeline.
+哈希桶搜索逻辑并行处理多个输入数据包。
+它被构建为几个阶段（3或者4阶段）流水线，每个流水线阶段处理来自突发输入的两个报文。
+在每个流水线迭代中，数据包被推送到下一个流水线阶段：对于4阶段的流水线，两个数据包（刚刚完成阶段3）退出流水线，两个数据包（刚刚完成阶段2）正在执行阶段3，两个数据包（刚刚完成阶段1）正在执行阶段2，两个数据包（刚刚完成阶段0）正在执行阶段1，两个数据包（从输入数据包中读取）正在执行阶段0。
+流水线持续迭代，直到来自输入分组的所有报文全部出流水线。
 
-The bucket search logic is broken into pipeline stages at the boundary of the next memory access.
-Each pipeline stage uses data structures that are stored (with high probability) into the L1 or L2 cache memory of the current CPU core and
-breaks just before the next memory access required by the algorithm.
-The current pipeline stage finalizes by prefetching the data structures required by the next pipeline stage,
-so given enough time for the prefetch to complete,
-when the next pipeline stage eventually gets executed for the same packets,
-it will read the data structures it needs from L1 or L2 cache memory and thus avoid the significant penalty incurred by L2 or L3 cache memory miss.
+哈希桶搜索逻辑在存储器访问边界处分成流水线的不同阶段。
+每个流水线阶段（高概率）使用存储在当前CPU core的L1/L2 cache中的数据结构，并在算法要求的下一个存储器访问之前终止。
+当前流水线阶段通过预取下一个阶段需要的数据结构来完成，当下一个流水线阶段执行时，可以直接从L1/L2 cache中读取数据，从而避免L2/L3 cache miss造成的性能损失。
 
-By prefetching the data structures required by the next pipeline stage in advance (before they are used)
-and switching to executing another pipeline stage for different packets,
-the number of L2 or L3 cache memory misses is greatly reduced, hence one of the main reasons for improved performance.
-This is because the cost of L2/L3 cache memory miss on memory read accesses is high, as usually due to data dependency between instructions,
-the CPU execution units have to stall until the read operation is completed from L3 cache memory or external DRAM memory.
-By using prefetch instructions, the latency of memory read accesses is hidden,
-provided that it is preformed early enough before the respective data structure is actually used.
+通过预取下一个水线阶段需要的数据结构，并且切换到针对不同分组的另一个流水线阶段，L2/L3 cache miss会大大减少。
+这是因为在存储器读取L2 /L3 cache miss的数据成本很高，通常由于指令之间的数据依赖性，CPU执行单元必须停止，直到从L3高速缓冲存储器或外部DRAM存储器完成读取操作。
+通过使用预取指令，存储器读取访问的延迟是隐藏的，只要在相应的数据结构被实际使用之前足够早地执行。
 
-By splitting the processing into several stages that are executed on different packets (the packets from the input burst are interlaced),
-enough work is created to allow the prefetch instructions to complete successfully (before the prefetched data structures are actually accessed) and
-also the data dependency between instructions is loosened.
-For example, for the 4-stage pipeline, stage 0 is executed on packets 0 and 1 and then,
-before same packets 0 and 1 are used (i.e. before stage 1 is executed on packets 0 and 1),
-different packets are used: packets 2 and 3 (executing stage 1), packets 4 and 5 (executing stage 2) and packets 6 and 7 (executing stage 3).
-By executing useful work while the data structures are brought into the L1 or L2 cache memory, the latency of the read memory accesses is hidden.
-By increasing the gap between two consecutive accesses to the same data structure, the data dependency between instructions is loosened;
-this allows making the best use of the super-scalar and out-of-order execution CPU architecture,
-as the number of CPU core execution units that are active (rather than idle or stalled due to data dependency constraints between instructions) is maximized.
+通过将处理分成在不同分组上执行的几个阶段（来自输入突发的分组交错），创建足够的工作以允许预取指令成功完成（在预取的数据结构被实际访问之前）以及数据指令之间的依赖关系被松动了。例如，对于4级流水线，对包0和1执行阶段0，然后在使用相同包0和1之前（即，在包0和1上执行阶1之前），使用不同的包：包2和3（执行阶段1），分组4和5（执行阶段2）以及分组6和7（执行阶段3）。
+通过在将数据结构带入L1或L2高速缓冲存储器的同时执行有用的工作，隐藏了读取存储器访问的等待时间。
+通过增加对同一数据结构的两次连续访问之间的差距，减轻了指令之间的数据依赖性;这允许最大限度地利用超标量和无序执行CPU架构，因为处于活动状态的CPU核心执行单元的数量（而不是由于指令之间的数据依赖性约束而空闲或停滞）被最大化。
 
-The bucket search logic is also implemented without using any branch instructions.
-This avoids the important cost associated with flushing the CPU core execution pipeline on every instance of branch misprediction.
+哈希桶搜索逻辑也是在不是用任何分支指令的情况下实现的。
+这避免了在每个分支错误预测实例上刷新CPU core执行管道的相关消耗。
 
-Configurable Key Size Hash Table
-""""""""""""""""""""""""""""""""
+可配置Key大小的哈希表
+"""""""""""""""""""""""
 
-:numref:`figure_figure34`, :numref:`table_qos_25` and :numref:`table_qos_26` detail the main data structures used to implement configurable key size hash tables (either LRU or extendable bucket,
-either with pre-computed signature or "do-sig").
+:numref:`figure_figure34`, :numref:`table_qos_25` and :numref:`table_qos_26` 详细介绍用于实现可配置Key大小的哈希表的主要数据结构。
 
 .. _figure_figure34:
 
 .. figure:: img/figure34.*
 
-   Data Structures for Configurable Key Size Hash Tables
+   可配置Key大小的散列表的数据结构
 
 
 .. _table_qos_25:
@@ -516,169 +485,127 @@ either with pre-computed signature or "do-sig").
 .. table:: Main Large Data Structures (Arrays) used for Configurable Key Size Hash Tables
 
    +---+-------------------------+------------------------------+---------------------------+-------------------------------+
-   | # | Array name              | Number of entries            | Entry size (bytes)        | Description                   |
+   | # | 数组名                  | 条目数                       | 条目大小 (字节)           | 描述                          |
    |   |                         |                              |                           |                               |
    +===+=========================+==============================+===========================+===============================+
-   | 1 | Bucket array            | n_buckets (configurable)     | 32                        | Buckets of the hash table.    |
+   | 1 | Bucket array            | n_buckets (可配置)           | 32                        | 哈希表的桶数目                |
    |   |                         |                              |                           |                               |
    +---+-------------------------+------------------------------+---------------------------+-------------------------------+
-   | 2 | Bucket extensions array | n_buckets_ext (configurable) | 32                        | This array is only created    |
-   |   |                         |                              |                           | for extendable bucket tables. |
+   | 2 | Bucket extensions array | n_buckets_ext (可配置)       | 32                        | 只有可扩展哈希桶才会有        |
    |   |                         |                              |                           |                               |
    +---+-------------------------+------------------------------+---------------------------+-------------------------------+
-   | 3 | Key array               | n_keys                       | key_size (configurable)   | Keys added to the hash table. |
+   | 3 | Key array               | n_keys                       | key_size (可配置)         | Keys                          |
    |   |                         |                              |                           |                               |
    +---+-------------------------+------------------------------+---------------------------+-------------------------------+
-   | 4 | Data array              | n_keys                       | entry_size (configurable) | Key values (key data)         |
-   |   |                         |                              |                           | associated with the hash      |
-   |   |                         |                              |                           | table keys.                   |
-   |   |                         |                              |                           |                               |
+   | 4 | Data array              | n_keys                       | entry_size (可配置)       | Key values                    |
    +---+-------------------------+------------------------------+---------------------------+-------------------------------+
 
 .. _table_qos_26:
 
-.. table:: Field Description for Bucket Array Entry (Configurable Key Size Hash Tables)
+.. table:: 数组输入的字段描述（可配置的密钥大小哈希表）
 
-   +---+------------------+--------------------+------------------------------------------------------------------+
-   | # | Field name       | Field size (bytes) | Description                                                      |
-   |   |                  |                    |                                                                  |
-   +===+==================+====================+==================================================================+
-   | 1 | Next Ptr/LRU     | 8                  | For LRU tables, this fields represents the LRU list for the      |
-   |   |                  |                    | current bucket stored as array of 4 entries of 2 bytes each.     |
-   |   |                  |                    | Entry 0 stores the index (0 .. 3) of the MRU key, while entry 3  |
-   |   |                  |                    | stores the index of the LRU key.                                 |
-   |   |                  |                    |                                                                  |
-   |   |                  |                    | For extendable bucket tables, this field represents the next     |
-   |   |                  |                    | pointer (i.e. the pointer to the next group of 4 keys linked to  |
-   |   |                  |                    | the current bucket). The next pointer is not NULL if the bucket  |
-   |   |                  |                    | is currently extended or NULL otherwise.                         |
-   |   |                  |                    | To help the branchless implementation, bit 0 (least significant  |
-   |   |                  |                    | bit) of this field is set to 1 if the next pointer is not NULL   |
-   |   |                  |                    | and to 0 otherwise.                                              |
-   |   |                  |                    |                                                                  |
-   +---+------------------+--------------------+------------------------------------------------------------------+
-   | 2 | Sig[0 .. 3]      | 4 x 2              | If key X (X = 0 .. 3) is valid, then sig X bits 15 .. 1 store    |
-   |   |                  |                    | the most significant 15 bits of key X signature and sig X bit 0  |
-   |   |                  |                    | is set to 1.                                                     |
-   |   |                  |                    |                                                                  |
-   |   |                  |                    | If key X is not valid, then sig X is set to zero.                |
-   |   |                  |                    |                                                                  |
-   +---+------------------+--------------------+------------------------------------------------------------------+
-   | 3 | Key Pos [0 .. 3] | 4 x 4              | If key X is valid (X = 0 .. 3), then Key Pos X represents the    |
-   |   |                  |                    | index into the key array where key X is stored, as well as the   |
-   |   |                  |                    | index into the data array where the value associated with key X  |
-   |   |                  |                    | is stored.                                                       |
-   |   |                  |                    |                                                                  |
-   |   |                  |                    | If key X is not valid, then the value of Key Pos X is undefined. |
-   |   |                  |                    |                                                                  |
-   +---+------------------+--------------------+------------------------------------------------------------------+
+   +---+-----------------+-------------------+------------------------------------------------------------------+
+   | # | Field name      | Field size (bytes)| Description                                                      |
+   |   |                 |                   |                                                                  |
+   +===+=================+===================+==================================================================+
+   | 1 | Next Ptr/LRU    | 8                 | 对于LRU表，这些字段表示当前哈希桶的LRU列表                       |
+   |   |                 |                   | 每个存储为2B的4个条目数组。                                      |
+   |   |                 |                   | 条目0存储MRU Key的索引（0..3），而条目3存储LRU Key的索引。       |
+   |   |                 |                   |                                                                  |
+   |   |                 |                   | 对于可扩展桶表，该字段表示下一个指针（即指向链接到当前桶的       |
+   |   |                 |                   | 下一组4个Key的指针）。如果存储桶当前已扩展，则下一个指针不为NULL |
+   |   |                 |                   | 如果下一个指针不为NULL，则将该字段的位0设置为1，否则置位0。      |
+   |   |                 |                   |                                                                  |
+   +---+-----------------+-------------------+------------------------------------------------------------------+
+   | 2 | Sig[0 .. 3]     | 4 x 2             | 如果 key X (X = 0 .. 3) 有效，则 sig X 的 bits 15 .. 1 存储      |
+   |   |                 |                   | 哈希值的最高 15 bits，而sig X bit 0 设置为1。                    |
+   |   |                 |                   |                                                                  |
+   |   |                 |                   | 如果 key X 无效， sig X 被设置为0。                              |
+   |   |                 |                   |                                                                  |
+   +---+-----------------+-------------------+------------------------------------------------------------------+
+   | 3 | Key Pos [0 .. 3]| 4 x 4             | 如果 key X (X = 0 .. 3)有效，那么 Key Pos X 代表                 |
+   |   |                 |                   | 存储Key X的数组的索引，以及存储与Key X相关联的值的数据数组索引   |
+   |   |                 |                   |                                                                  |
+   |   |                 |                   | 如果 key X 无效，Key Pos X 的值未定义。                          |
+   +---+-----------------+-------------------+------------------------------------------------------------------+
 
 
-:numref:`figure_figure35` and :numref:`table_qos_27` detail the bucket search pipeline stages (either LRU or extendable bucket,
-either with pre-computed signature or "do-sig").
-For each pipeline stage, the described operations are applied to each of the two packets handled by that stage.
+:numref:`figure_figure35` and :numref:`table_qos_27` 详细说明桶搜索流水线阶段(LRU或可扩展桶，预先计算哈希值或"do-sig")。
+对于每个流水线阶段，所描述的操作被应用于由该阶段处理的两个报文中的任何一个。
 
 .. _figure_figure35:
 
 .. figure:: img/figure35.*
 
-   Bucket Search Pipeline for Key Lookup Operation (Configurable Key Size Hash
-   Tables)
+   用于Key查找操作的流水线(可配置Key大小的哈希表)
 
 
 .. _table_qos_27:
 
-.. table:: Description of the Bucket Search Pipeline Stages (Configurable Key Size Hash Tables)
+.. table:: 桶搜索流水线阶段的描述(可配置Key大小的哈希表)
 
-   +---+---------------------------+------------------------------------------------------------------------------+
-   | # | Stage name                | Description                                                                  |
-   |   |                           |                                                                              |
-   +===+===========================+==============================================================================+
-   | 0 | Prefetch packet meta-data | Select next two packets from the burst of input packets.                     |
-   |   |                           |                                                                              |
-   |   |                           | Prefetch packet meta-data containing the key and key signature.              |
-   |   |                           |                                                                              |
-   +---+---------------------------+------------------------------------------------------------------------------+
-   | 1 | Prefetch table bucket     | Read the key signature from the packet meta-data (for extendable bucket hash |
-   |   |                           | tables) or read the key from the packet meta-data and compute key signature  |
-   |   |                           | (for LRU tables).                                                            |
-   |   |                           |                                                                              |
-   |   |                           | Identify the bucket ID using the key signature.                              |
-   |   |                           |                                                                              |
-   |   |                           | Set bit 0 of the signature to 1 (to match only signatures of valid keys from |
-   |   |                           | the table).                                                                  |
-   |   |                           |                                                                              |
-   |   |                           | Prefetch the bucket.                                                         |
-   |   |                           |                                                                              |
-   +---+---------------------------+------------------------------------------------------------------------------+
-   | 2 | Prefetch table key        | Read the key signatures from the bucket.                                     |
-   |   |                           |                                                                              |
-   |   |                           | Compare the signature of the input key against the 4 key signatures from the |
-   |   |                           | packet. As result, the following is obtained:                                |
-   |   |                           |                                                                              |
-   |   |                           | *match*                                                                      |
-   |   |                           | = equal to TRUE if there was at least one signature match and to FALSE in    |
-   |   |                           | the case of no signature match;                                              |
-   |   |                           |                                                                              |
-   |   |                           | *match_many*                                                                 |
-   |   |                           | = equal to TRUE is there were more than one signature matches (can be up to  |
-   |   |                           | 4 signature matches in the worst case scenario) and to FALSE otherwise;      |
-   |   |                           |                                                                              |
-   |   |                           | *match_pos*                                                                  |
-   |   |                           | = the index of the first key that produced signature match (only valid if    |
-   |   |                           | match is true).                                                              |
-   |   |                           |                                                                              |
-   |   |                           | For extendable bucket hash tables only, set                                  |
-   |   |                           | *match_many*                                                                 |
-   |   |                           | to TRUE if next pointer is valid.                                            |
-   |   |                           |                                                                              |
-   |   |                           | Prefetch the bucket key indicated by                                         |
-   |   |                           | *match_pos*                                                                  |
-   |   |                           | (even if                                                                     |
-   |   |                           | *match_pos*                                                                  |
-   |   |                           | does not point to valid key valid).                                          |
-   |   |                           |                                                                              |
-   +---+---------------------------+------------------------------------------------------------------------------+
-   | 3 | Prefetch table data       | Read the bucket key indicated by                                             |
-   |   |                           | *match_pos*.                                                                 |
-   |   |                           |                                                                              |
-   |   |                           | Compare the bucket key against the input key. As result, the following is    |
-   |   |                           | obtained:                                                                    |
-   |   |                           | *match_key*                                                                  |
-   |   |                           | = equal to TRUE if the two keys match and to FALSE otherwise.                |
-   |   |                           |                                                                              |
-   |   |                           | Report input key as lookup hit only when both                                |
-   |   |                           | *match*                                                                      |
-   |   |                           | and                                                                          |
-   |   |                           | *match_key*                                                                  |
-   |   |                           | are equal to TRUE and as lookup miss otherwise.                              |
-   |   |                           |                                                                              |
-   |   |                           | For LRU tables only, use branchless logic to update the bucket LRU list      |
-   |   |                           | (the current key becomes the new MRU) only on lookup hit.                    |
-   |   |                           |                                                                              |
-   |   |                           | Prefetch the key value (key data) associated with the current key (to avoid  |
-   |   |                           | branches, this is done on both lookup hit and miss).                         |
-   |   |                           |                                                                              |
-   +---+---------------------------+------------------------------------------------------------------------------+
+   +---+-----------------------+------------------------------------------------------------------------------+
+   | # | Stage name            | 描述                                                                         |
+   |   |                       |                                                                              |
+   +===+=======================+==============================================================================+
+   | 0 | 预取报文元数据        | 从输入数据包的突发中选择接下来的两个数据包。                                 |
+   |   |                       |                                                                              |
+   |   |                       | 预取包含Key和哈希值的数据包元数据。                                          |
+   |   |                       |                                                                              |
+   +---+-----------------------+------------------------------------------------------------------------------+
+   | 1 | Prefetch table bucket | 从报文元数据中读取哈希值（对于可扩展表），从报文元数据中读取Key（LRU表）     |
+   |   |                       |                                                                              |
+   |   |                       | 使用哈希值识别桶ID。                                                         |
+   |   |                       |                                                                              |
+   |   |                       | 设置哈希值的bit 0 为1 (用于匹配表中哈希值有效的Key）                         |
+   |   |                       |                                                                              |
+   |   |                       | 预取桶。                                                                     |
+   |   |                       |                                                                              |
+   +---+-----------------------+------------------------------------------------------------------------------+
+   | 2 | Prefetch table key    | 从桶中读取哈希值。                                                           |
+   |   |                       |                                                                              |
+   |   |                       | 将哈希值与报文中读取的哈希值进行对比，可能产生如下几种结果：                 |
+   |   |                       |                                                                              |
+   |   |                       | *match*                                                                      |
+   |   |                       | = TRUE（如果至少有一个哈希值匹配）， FALSE（无哈希值匹配）                   |
+   |   |                       |                                                                              |
+   |   |                       | *match_many*                                                                 |
+   |   |                       | = TRUE（不止一个哈希值匹配，最多可以是4个），否则为FALSE。                   |
+   |   |                       |                                                                              |
+   |   |                       | *match_pos*                                                                  |
+   |   |                       | = 哈希值匹配的第一个Key索引（当match为TRUE是才有效）　　　　　　　　　　　　 |
+   |   |                       |                                                                              |
+   |   |                       | 对于桶扩展的哈希表，如果next pointer有效设置 *match_many*为TRUE              |
+   |   |                       |                                                                              |
+   |   |                       | 预取由 *match_pos* 标识的Key。                                               |
+   +---+-----------------------+------------------------------------------------------------------------------+
+   | 3 | Prefetch table data   | 读取由 *match_pos* 标识的Key。                                               |
+   |   |                       |                                                                              |
+   |   |                       | 将该Key与输入的Key进行对比，产生如下结果：                                   |
+   |   |                       | *match_key*                                                                  |
+   |   |                       | = TRUE（如果两个key匹配），否则为FALSE。                                     |
+   |   |                       |                                                                              |
+   |   |                       | 当且仅当 *match* 和 *match_key* 都为TRUE时报告查找命中，否则未命中。         |
+   |   |                       |                                                                              |
+   |   |                       | 对于LRU表。使用无分支逻辑来更新桶的LRU表（当查找命中时，当前Key更改为MRU）   |
+   |   |                       |                                                                              |
+   |   |                       | 预取Key值（与当前Key关联的数据域）。                                         |
+   |   |                       |                                                                              |
+   +---+-----------------------+------------------------------------------------------------------------------+
 
 
-Additional notes:
+额外注意:
 
-#.  The pipelined version of the bucket search algorithm is executed only if there are at least 7 packets in the burst of input packets.
-    If there are less than 7 packets in the burst of input packets,
-    a non-optimized implementation of the bucket search algorithm is executed.
+#.  桶搜索的流水线版本只有在输入突发中至少有7个包时才被执行。
+    如果输入突发中少于7个分组，则执行分组搜索算法的非优化实现。
 
-#.  Once the pipelined version of the bucket search algorithm has been executed for all the packets in the burst of input packets,
-    the non-optimized implementation of the bucket search algorithm is also executed for any packets that did not produce a lookup hit,
-    but have the *match_many* flag set.
-    As result of executing the non-optimized version, some of these packets may produce a lookup hit or lookup miss.
-    This does not impact the performance of the key lookup operation,
-    as the probability of matching more than one signature in the same group of 4 keys or of having the bucket in extended state
-    (for extendable bucket hash tables only) is relatively small.
+#.  一旦针对输入突发中的所有分组已经执行了桶搜索算法的流水线版本，则对不产生查找命中的任何分组，如果 *match_many* 已经设置了，那么将同时执行桶优化算法的非优化实现。
+    作为执行非优化版的结果，这些分组中的一些可能产生查找命中或者未命中。
+    这并不会影响Key查找操作的性能，因为在同一组4个Key中匹配多个哈希值的概率或者处于扩展状态的桶的概率相对较小。
 
-**Key Signature Comparison Logic**
+**哈希值比较逻辑**
 
-The key signature comparison logic is described in :numref:`table_qos_28`.
+哈希值比较逻辑描述如下 :numref:`table_qos_28`.
 
 .. _table_qos_28:
 
@@ -737,13 +664,11 @@ The key signature comparison logic is described in :numref:`table_qos_28`.
    |    |      |               |                    |                    |
    +----+------+---------------+--------------------+--------------------+
 
-The input *mask* hash bit X (X = 0 .. 3) set to 1 if input signature is equal to bucket signature X and set to 0 otherwise.
-The outputs *match*, *match_many* and *match_pos* are 1 bit, 1 bit and 2 bits in size respectively and their meaning has been explained above.
+输入的 *mask* 哈希 bit X (X = 0 .. 3) 设置为 1，如果输入的哈希值等于桶的哈希值X，否则则设置为0。
+输出的 *match*, *match_many* 及 *match_pos* 是 1 bit, 1 bit 和 2 bits大小，其意义如上表描述。
 
-As displayed in :numref:`table_qos_29`, the lookup tables for *match* and *match_many* can be collapsed into a single 32-bit value and the lookup table for
-*match_pos* can be collapsed into a 64-bit value.
-Given the input *mask*, the values for *match*, *match_many* and *match_pos* can be obtained by indexing their respective bit array to extract 1 bit,
-1 bit and 2 bits respectively with branchless logic.
+如 :numref:`table_qos_29` 所描述的， *match* 和 *match_many* 的查找表可以折叠成一个32bit的值，*match_pos* 可以折叠成一个64bit的值。
+给定输入的 *mask* ，*match* 的值， *match_many* 和 *match_pos* 的值可以通过索引他们各自的比特数来获得，分别用无分支逻辑取1，1和2 bits。
 
 .. _table_qos_29:
 
@@ -764,7 +689,7 @@ Given the input *mask*, the values for *match*, *match_many* and *match_pos* can
    +------------+------------------------------------------+-------------------+
 
 
-The pseudo-code for match, match_many and match_pos is::
+计算match, match_many 和 match_pos 的伪代码::
 
     match = (0xFFFELLU >> mask) & 1;
 
@@ -772,35 +697,34 @@ The pseudo-code for match, match_many and match_pos is::
 
     match_pos = (0x12131210LLU >> (mask << 1)) & 3;
 
-Single Key Size Hash Tables
-"""""""""""""""""""""""""""
+单一Key大小的哈希表
+"""""""""""""""""""""
 
-:numref:`figure_figure37`, :numref:`figure_figure38`, :numref:`table_qos_30` and :numref:`table_qos_31` detail the main data structures used to implement 8-byte and 16-byte key hash tables
-(either LRU or extendable bucket, either with pre-computed signature or "do-sig").
+:numref:`figure_figure37`, :numref:`figure_figure38`, :numref:`table_qos_30` and :numref:`table_qos_31` 详细描述了用于实现8B和16B Key的哈希表的主要的数据结构(包括LRU或扩展桶表，预先计算哈希值或"do-sig")。
 
 .. _figure_figure37:
 
 .. figure:: img/figure37.*
 
-   Data Structures for 8-byte Key Hash Tables
+   8B Key哈希表数据结构
 
 
 .. _figure_figure38:
 
 .. figure:: img/figure38.*
 
-   Data Structures for 16-byte Key Hash Tables
+   16B Key哈希表数据结构
 
 
 .. _table_qos_30:
 
-.. table:: Main Large Data Structures (Arrays) used for 8-byte and 16-byte Key Size Hash Tables
+.. table:: 用于8B和16B Key大小的哈希表的主要数据结构
 
    +---+-------------------------+------------------------------+----------------------+------------------------------------+
    | # | Array name              | Number of entries            | Entry size (bytes)   | Description                        |
    |   |                         |                              |                      |                                    |
    +===+=========================+==============================+======================+====================================+
-   | 1 | Bucket array            | n_buckets (configurable)     | *8-byte key size:*   | Buckets of the hash table.         |
+   | 1 | Bucket array            | n_buckets (configurable)     | *8-byte key size:*   | 该哈希表的桶                       |
    |   |                         |                              |                      |                                    |
    |   |                         |                              | 64 + 4 x entry_size  |                                    |
    |   |                         |                              |                      |                                    |
@@ -810,8 +734,7 @@ Single Key Size Hash Tables
    |   |                         |                              | 128 + 4 x entry_size |                                    |
    |   |                         |                              |                      |                                    |
    +---+-------------------------+------------------------------+----------------------+------------------------------------+
-   | 2 | Bucket extensions array | n_buckets_ext (configurable) | *8-byte key size:*   | This array is only created for     |
-   |   |                         |                              |                      | extendable bucket tables.          |
+   | 2 | Bucket extensions array | n_buckets_ext (configurable) | *8-byte key size:*   | 仅用于扩展桶的哈希表               |
    |   |                         |                              |                      |                                    |
    |   |                         |                              | 64 + 4 x entry_size  |                                    |
    |   |                         |                              |                      |                                    |
@@ -824,27 +747,23 @@ Single Key Size Hash Tables
 
 .. _table_qos_31:
 
-.. table:: Field Description for Bucket Array Entry (8-byte and 16-byte Key Hash Tables)
+.. table:: 桶数组条目字段说明(8B和16B Key大小的哈希表)
 
    +---+---------------+--------------------+-------------------------------------------------------------------------------+
-   | # | Field name    | Field size (bytes) | Description                                                                   |
+   | # | Field name    | Field size (bytes) | 描述                                                                          |
    |   |               |                    |                                                                               |
    +===+===============+====================+===============================================================================+
-   | 1 | Valid         | 8                  | Bit X (X = 0 .. 3) is set to 1 if key X is valid or to 0 otherwise.           |
+   | 1 | Valid         | 8                  | 如果Key X有效，那么Bit X (X = 0 .. 3) 设置为1，否则为0。                      |
    |   |               |                    |                                                                               |
-   |   |               |                    | Bit 4 is only used for extendable bucket tables to help with the              |
-   |   |               |                    | implementation of the branchless logic. In this case, bit 4 is set to 1 if    |
-   |   |               |                    | next pointer is valid (not NULL) or to 0 otherwise.                           |
+   |   |               |                    | Bit 4 仅用于扩展桶的哈希表，用来帮助实现无分支逻辑。                          |
+   |   |               |                    | 在这种情况下，如果next pointer有效，bit 4 设置为1，否则为0。                  |
    |   |               |                    |                                                                               |
    +---+---------------+--------------------+-------------------------------------------------------------------------------+
-   | 2 | Next Ptr/LRU  | 8                  | For LRU tables, this fields represents the LRU list for the current bucket    |
-   |   |               |                    | stored as array of 4 entries of 2 bytes each. Entry 0 stores the index        |
-   |   |               |                    | (0 .. 3) of the MRU key, while entry 3 stores the index of the LRU key.       |
+   | 2 | Next Ptr/LRU  | 8                  | 对于LRU表，这个字段代表了当前桶中的LRU表。以2B代表4个条目存储为数组。         |
+   |   |               |                    | 条目 0 存储  MRU key (0 .. 3)，条目3存储LRU Key。                             |
    |   |               |                    |                                                                               |
-   |   |               |                    | For extendable bucket tables, this field represents the next pointer (i.e.    |
-   |   |               |                    | the pointer to the next group of 4 keys linked to the current bucket). The    |
-   |   |               |                    | next pointer is not NULL if the bucket is currently extended or NULL          |
-   |   |               |                    | otherwise.                                                                    |
+   |   |               |                    | 对于可扩展桶表，该字段表示下一个指针（即指向链接到当前桶的下一组4个键的指针） |
+   |   |               |                    | 如果存储桶当前被扩展，则下一个指针不为NULL;否则为NULL。                       |
    |   |               |                    |                                                                               |
    +---+---------------+--------------------+-------------------------------------------------------------------------------+
    | 3 | Key [0 .. 3]  | 4 x key_size       | Full keys.                                                                    |
@@ -854,262 +773,225 @@ Single Key Size Hash Tables
    |   |               |                    |                                                                               |
    +---+---------------+--------------------+-------------------------------------------------------------------------------+
 
-and detail the bucket search pipeline used to implement 8-byte and 16-byte key hash tables (either LRU or extendable bucket,
-either with pre-computed signature or "do-sig").
-For each pipeline stage, the described operations are applied to each of the two packets handled by that stage.
+详细介绍用于实现8B和16B大小的Key的哈希表(包括LRU或可扩展桶表，预先计算哈希值或者"do-sig")。
+对于每个流水线阶段，所描述的操作被应用于由该阶段处理的两个分组中的每一个。
 
 .. _figure_figure39:
 
 .. figure:: img/figure39.*
 
-   Bucket Search Pipeline for Key Lookup Operation (Single Key Size Hash
-   Tables)
+   用于Key查找操作的桶搜索水线(单一Key大小的哈希表)
 
 
 .. _table_qos_32:
 
-.. table:: Description of the Bucket Search Pipeline Stages (8-byte and 16-byte Key Hash Tables)
+.. table:: 桶搜索流水线阶段的描述（8B和16B的Key散列表）
 
    +---+---------------------------+-----------------------------------------------------------------------------+
    | # | Stage name                | Description                                                                 |
    |   |                           |                                                                             |
    +===+===========================+=============================================================================+
-   | 0 | Prefetch packet meta-data | #.  Select next two packets from the burst of input packets.                |
+   | 0 | Prefetch packet meta-data | #.  从输入数据包的突发中选择接下来的两个数据包。                            |
    |   |                           |                                                                             |
-   |   |                           | #.  Prefetch packet meta-data containing the key and key signature.         |
-   |   |                           |                                                                             |
-   +---+---------------------------+-----------------------------------------------------------------------------+
-   | 1 | Prefetch table bucket     | #.  Read the key signature from the packet meta-data (for extendable bucket |
-   |   |                           |     hash tables) or read the key from the packet meta-data and compute key  |
-   |   |                           |     signature (for LRU tables).                                             |
-   |   |                           |                                                                             |
-   |   |                           | #.  Identify the bucket ID using the key signature.                         |
-   |   |                           |                                                                             |
-   |   |                           | #.  Prefetch the bucket.                                                    |
+   |   |                           | #.  预取包含Key和哈希值的数据包元数据。                                     |
    |   |                           |                                                                             |
    +---+---------------------------+-----------------------------------------------------------------------------+
-   | 2 | Prefetch table data       | #.  Read the bucket.                                                        |
+   | 1 | Prefetch table bucket     | #.  从报文元数据中读取哈希值（对于可扩展桶表），从报文元数据中读取Key(LRU表)|
    |   |                           |                                                                             |
-   |   |                           | #.  Compare all 4 bucket keys against the input key.                        |
+   |   |                           | #.  使用哈希值来识别bucket ID。                                             |
    |   |                           |                                                                             |
-   |   |                           | #.  Report input key as lookup hit only when a match is identified (more    |
-   |   |                           |     than one key match is not possible)                                     |
+   |   |                           | #.  预取bucket。                                                            |
    |   |                           |                                                                             |
-   |   |                           | #.  For LRU tables only, use branchless logic to update the bucket LRU list |
-   |   |                           |     (the current key becomes the new MRU) only on lookup hit.               |
+   +---+---------------------------+-----------------------------------------------------------------------------+
+   | 2 | Prefetch table data       | #.  读取bucket。                                                            |
    |   |                           |                                                                             |
-   |   |                           | #.  Prefetch the key value (key data) associated with the matched key (to   |
-   |   |                           |     avoid branches, this is done on both lookup hit and miss).              |
+   |   |                           | #.  将输入的key与4个 bucket keys对比。                                      |
+   |   |                           |                                                                             |
+   |   |                           | #.  如果有一个匹配，则报告查找命中。                                        |
+   |   |                           |                                                                             |
+   |   |                           | #.  对于LRU表，使用无分支逻辑来更新存储区LRU列表（如果匹配当前Key变为MRU）  |
+   |   |                           |                                                                             |
+   |   |                           | #.  预取与匹配Key相关联的键值（键数据）（这在查找命中和未命中时完成）。     |
    |   |                           |                                                                             |
    +---+---------------------------+-----------------------------------------------------------------------------+
 
-Additional notes:
+额外注意：
 
-#.  The pipelined version of the bucket search algorithm is executed only if there are at least 5 packets in the burst of input packets.
-    If there are less than 5 packets in the burst of input packets, a non-optimized implementation of the bucket search algorithm is executed.
+#.  桶搜索算法的流水线版本只有在输入突发中至少有5个包时才会执行。
+    如果在输入分组突发中少于5个分组，则执行分组搜索算法的非优化实现。
 
-#.  For extendable bucket hash tables only,
-    once the pipelined version of the bucket search algorithm has been executed for all the packets in the burst of input packets,
-    the non-optimized implementation of the bucket search algorithm is also executed for any packets that did not produce a lookup hit,
-    but have the bucket in extended state.
-    As result of executing the non-optimized version, some of these packets may produce a lookup hit or lookup miss.
-    This does not impact the performance of the key lookup operation,
-    as the probability of having the bucket in extended state is relatively small.
+#.  对于可扩展的分组哈希表，一旦已经对输入分组的突发中的所有分组执行了桶搜索算法的流水线版本，对于没有产生的任何分组但有扩展状态的桶，也执行桶搜索算法的非优化实现 查找命中。
+    作为执行非优化版本的结果，这些分组中的一些可能产生查找命中或查找未命中。
+    这不影响密钥查找操作的性能，因为处于扩展状态的桶的概率相对较小。
 
-Pipeline Library Design
------------------------
+流水线库设计
+--------------
 
-A pipeline is defined by:
+一个流水线由如下几个元素定义：
 
-#.  The set of input ports;
+#.  一组输入端口；
 
-#.  The set of output ports;
+#.  一组输出端口；
 
-#.  The set of tables;
+#.  一组查找表；
 
-#.  The set of actions.
+#.  一组动作集。
 
-The input ports are connected with the output ports through tree-like topologies of interconnected tables.
-The table entries contain the actions defining the operations to be executed on the input packets and the packet flow within the pipeline.
+输入端口通过互连表格的树状拓扑连接到输出端口。
+表项包含定义在输入数据包上执行的动作和管道内的数据包流。
 
-Connectivity of Ports and Tables
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+端口和表的连接
+~~~~~~~~~~~~~~~~
 
-To avoid any dependencies on the order in which pipeline elements are created,
-the connectivity of pipeline elements is defined after all the pipeline input ports,
-output ports and tables have been created.
+为了避免对流水线创建顺序的依赖，流水线元素的连通性在所有水线输入端口、输出端口和表创建完之后被定义。
 
-General connectivity rules:
+一般的连接规则如下：
 
-#.  Each input port is connected to a single table. No input port should be left unconnected;
+#.  每个输入端口连接到一个表，没有输入端口是悬空的；
 
-#.  The table connectivity to other tables or to output ports is regulated by the next hop actions of each table entry and the default table entry.
-    The table connectivity is fluid, as the table entries and the default table entry can be updated during run-time.
+#.  与其他表或输出端口的表连接由每个表条目和默认表条目的下一跳动作来调节。
+    表连接性是流畅的，因为表项和默认表项可以在运行时更新。
 
-    *   A table can have multiple entries (including the default entry) connected to the same output port.
-        A table can have different entries connected to different output ports.
-        Different tables can have entries (including default table entry) connected to the same output port.
+    *   一个表可以有多个条目（包括默认条目）连接到同一个输出端口。
+        一个表可以有不同的条目连接到不同的输出端口。
+        不同的表可以有连接到同一个输出端口的条目（包括默认条目）。
 
-    *   A table can have multiple entries (including the default entry) connected to another table,
-        in which case all these entries have to point to the same table.
-        This constraint is enforced by the API and prevents tree-like topologies from being created (allowing table chaining only),
-        with the purpose of simplifying the implementation of the pipeline run-time execution engine.
+    *   一个表可以有多个条目（包括默认条目）连接到另一个表，在这种情况下，所有这些条目都必须指向同一个表。
+        这个约束是由API强制的，并且防止了树状拓扑的建立（只允许表连接），目的是简化流水线运行时执行引擎的实现。
 
-Port Actions
-~~~~~~~~~~~~
+端口动作
+~~~~~~~~~~
 
-Port Action Handler
-^^^^^^^^^^^^^^^^^^^
+端口动作处理
+^^^^^^^^^^^^^^^
 
-An action handler can be assigned to each input/output port to define actions to be executed on each input packet that is received by the port.
-Defining the action handler for a specific input/output port is optional (i.e. the action handler can be disabled).
+可以为每个输出/输出端口分配一个操作处理程序，以定义在端口接收到的每个输入数据包上执行的操作。
+为特定的输入输出端口定义动作处理程序是可选的。（即可以禁用动作处理程序）
 
-For input ports, the action handler is executed after RX function. For output ports, the action handler is executed before the TX function.
+对于输入端口，操作处理程序在RX功能之后执行。对于输出端口，动作处理程序在TX功能之前执行。
 
-The action handler can decide to drop packets.
+操作处理程序可以快速丢弃数据包。
 
-Table Actions
-~~~~~~~~~~~~~
+表动作
+~~~~~~~~
 
-Table Action Handler
-^^^^^^^^^^^^^^^^^^^^
+表动作处理
+^^^^^^^^^^^^
 
-An action handler to be executed on each input packet can be assigned to each table.
-Defining the action handler for a specific table is optional (i.e. the action handler can be disabled).
+每个输入数据包上执行的操作处理程序可以分配给每个表。
+为特定表定义动作处理程序是可选的（即可以禁用动作处理程序）。
 
-The action handler is executed after the table lookup operation is performed and the table entry associated with each input packet is identified.
-The action handler can only handle the user-defined actions, while the reserved actions (e.g. the next hop actions) are handled by the Packet Framework.
-The action handler can decide to drop the input packet.
+在执行表查找操作之后执行动作处理程序，并且识别与每个输入分组相关联的表项。
+操作处理程序只能处理用户定义的操作，而保留的操作（如下一跳操作）则由分组框架处理。
+操作处理程序可以决定丢弃输入数据包。
 
-Reserved Actions
-^^^^^^^^^^^^^^^^
+预留动作
+^^^^^^^^^^
 
-The reserved actions are handled directly by the Packet Framework without the user being able to change their meaning
-through the table action handler configuration.
-A special category of the reserved actions is represented by the next hop actions, which regulate the packet flow between input ports,
-tables and output ports through the pipeline.
-:numref:`table_qos_33` lists the next hop actions.
+保留的动作有数据包框架直接处理，用户无法通过表动作处理程序配置更改其含义。
+保留动作的一个特殊类别由下一跳动作来表示，它通过流水线来调节输入端口、表格和输出端口之间的数据流。
+:numref:`table_qos_33` 列出了下一跳动作。
 
 .. _table_qos_33:
 
 .. table:: Next Hop Actions (Reserved)
 
    +---+---------------------+-----------------------------------------------------------------------------------+
-   | # | Next hop action     | Description                                                                       |
+   | # | Next hop action     | 描述                                                                              |
    |   |                     |                                                                                   |
    +===+=====================+===================================================================================+
-   | 1 | Drop                | Drop the current packet.                                                          |
+   | 1 | Drop                | 丢弃当前报文。                                                                    |
    |   |                     |                                                                                   |
    +---+---------------------+-----------------------------------------------------------------------------------+
-   | 2 | Send to output port | Send the current packet to specified output port. The output port ID is metadata  |
-   |   |                     | stored in the same table entry.                                                   |
+   | 2 | Send to output port | 发送当前报文到指定的输出端口。输出端口ID是存储在表元素中的元素据。                |
    |   |                     |                                                                                   |
    +---+---------------------+-----------------------------------------------------------------------------------+
-   | 3 | Send to table       | Send the current packet to specified table. The table ID is metadata stored in    |
-   |   |                     | the same table entry.                                                             |
+   | 3 | Send to table       | 发送当前报文到指定的表，表D是存储在表元素中的元数据。                             |
    |   |                     |                                                                                   |
    +---+---------------------+-----------------------------------------------------------------------------------+
 
-User Actions
-^^^^^^^^^^^^
+用户动作
+^^^^^^^^^^
 
-For each table, the meaning of user actions is defined through the configuration of the table action handler.
-Different tables can be configured with different action handlers, therefore the meaning of the user actions
-and their associated meta-data is private to each table.
-Within the same table, all the table entries (including the table default entry) share the same definition
-for the user actions and their associated meta-data,
-with each table entry having its own set of enabled user actions and its own copy of the action meta-data.
-:numref:`table_qos_34` contains a non-exhaustive list of user action examples.
+对于每个表，用户动作的含义都是通过表操作处理程序的配置来定义的。
+不同的表可以配置不同的操作处理程序，因此用户动作及其相关元数据的含义对于每个表是私有的。
+在同一个表中，所有表项（包括表默认项）共享用户动作及其相关元数据的相同定义，每个表项具有其自己的一组启用的用户动作以及它自己的操作副本元数据。
+
+:numref:`table_qos_34` 包含用户动作的部分列表。
 
 .. _table_qos_34:
 
-.. table:: User Action Examples
+.. table:: 用户动作实例
 
    +---+-----------------------------------+---------------------------------------------------------------------+
-   | # | User action                       | Description                                                         |
+   | # | User action                       | 描述                                                                |
    |   |                                   |                                                                     |
    +===+===================================+=====================================================================+
-   | 1 | Metering                          | Per flow traffic metering using the srTCM and trTCM algorithms.     |
+   | 1 | Metering                          | 使用srTCM和trTCM算法的每流量计量。                                  |
    |   |                                   |                                                                     |
    +---+-----------------------------------+---------------------------------------------------------------------+
-   | 2 | Statistics                        | Update the statistics counters maintained per flow.                 |
+   | 2 | Statistics                        | 更新每个流维护的统计信息计数器。                                    |
    |   |                                   |                                                                     |
    +---+-----------------------------------+---------------------------------------------------------------------+
-   | 3 | App ID                            | Per flow state machine fed by variable length sequence of packets   |
-   |   |                                   | at the flow initialization with the purpose of identifying the      |
-   |   |                                   | traffic type and application.                                       |
+   | 3 | App ID                            | 每个流状态机在流初始化时通过可变长度的分组序列进行馈送，            |
+   |   |                                   | 以识别流量类型和应用。                                              |
    |   |                                   |                                                                     |
    +---+-----------------------------------+---------------------------------------------------------------------+
-   | 4 | Push/pop labels                   | Push/pop VLAN/MPLS labels to/from the current packet.               |
+   | 4 | Push/pop labels                   | 对当前报文执行VLAN/MPLS标签的入栈和出栈                             |
    |   |                                   |                                                                     |
    +---+-----------------------------------+---------------------------------------------------------------------+
-   | 5 | Network Address Translation (NAT) | Translate between the internal (LAN) and external (WAN) IP          |
-   |   |                                   | destination/source address and/or L4 protocol destination/source    |
-   |   |                                   | port.                                                               |
+   | 5 | Network Address Translation (NAT) | 内部和外部IP地址（源和目的）的转化，L4协议源/目的端口转换           |
    |   |                                   |                                                                     |
    +---+-----------------------------------+---------------------------------------------------------------------+
-   | 6 | TTL update                        | Decrement IP TTL and, in case of IPv4 packets, update the IP        |
-   |   |                                   | checksum.                                                           |
+   | 6 | TTL update                        | 递减TP TTL值，及更新IPv4报文的校验和。                              |
    |   |                                   |                                                                     |
    +---+-----------------------------------+---------------------------------------------------------------------+
 
-Multicore Scaling
------------------
+多核处理
+----------
 
-A complex application is typically split across multiple cores, with cores communicating through SW queues.
-There is usually a performance limit on the number of table lookups
-and actions that can be fitted on the same CPU core due to HW constraints like:
-available CPU cycles, cache memory size, cache transfer BW, memory transfer BW, etc.
+一个复杂的程序通常分成多核处理，多核之间通过SW队列进行通信。
+由于以下硬件约束，在同一CPU内核上可以安装的表查找操作的数量通常有性能限制：了用的CPU周期，高速缓冲区的大小、高数缓存带宽、存储器传输带宽等。
 
-As the application is split across multiple CPU cores, the Packet Framework facilitates the creation of several pipelines,
-the assignment of each such pipeline to a different CPU core
-and the interconnection of all CPU core-level pipelines into a single application-level complex pipeline.
-For example, if CPU core A is assigned to run pipeline P1 and CPU core B pipeline P2,
-then the interconnection of P1 with P2 could be achieved by having the same set of SW queues act like output ports
-for P1 and input ports for P2.
+由于应用程序跨越多个CPU核心，数据包框架便于创建多个流水线，将每个这样的流水线分配给不同的核心，并将所有的CPU核心级别的流水线互联为单个应用级复杂流水线。
+例如，如果CPU核心A被分配运行流水线P1和CPU核心B流水线P2，则P1和P2的相互连接可以通过使相同的一组SW队列作为P1的输出端口和P2的输入端口来实现。
 
-This approach enables the application development using the pipeline, run-to-completion (clustered) or hybrid (mixed) models.
+这种方法可以使用流水线，运行到完成（集群）或混合（混合）模型来开发应用程序。
 
-It is allowed for the same core to run several pipelines, but it is not allowed for several cores to run the same pipeline.
+允许同一个内核运行多个管道，但不允许多个内核运行相同的管道。
 
-Shared Data Structures
-~~~~~~~~~~~~~~~~~~~~~~
+共享的数据结构
+~~~~~~~~~~~~~~~~
 
-The threads performing table lookup are actually table writers rather than just readers.
-Even if the specific table lookup algorithm is thread-safe for multiple readers
-(e. g. read-only access of the search algorithm data structures is enough to conduct the lookup operation),
-once the table entry for the current packet is identified, the thread is typically expected to update the action meta-data stored in the table entry
-(e.g. increment the counter tracking the number of packets that hit this table entry), and thus modify the table entry.
-During the time this thread is accessing this table entry (either writing or reading; duration is application specific),
-for data consistency reasons, no other threads (threads performing table lookup or entry add/delete operations) are allowed to modify this table entry.
+执行表查询的线程实际上是写线程，不仅仅是读操作。
+即便指定的表查找算法是多线程安全的读者(如搜索算法数据结构的只读访问足以进行查找操作)，
+一旦识别出当前报文的表项，通常期望线程更新存储在表项中的元数据(如增加命中该表项的数据包的计数器等)，这写操作将修改表项。
+在此线程访问表项期间（写入或读取；持续时间与应用程序相关），由于数据一致性原因，不允许其他线程（执行查表或者添加删除表项操作）来修改此表项。
 
-Mechanisms to share the same table between multiple threads:
+在多个线程之间共享一个表的机制：
 
-#.  **Multiple writer threads.**
-    Threads need to use synchronization primitives like semaphores (distinct semaphore per table entry) or atomic instructions.
-    The cost of semaphores is usually high, even when the semaphore is free.
-    The cost of atomic instructions is normally higher than the cost of regular instructions.
+#.  **多个写线程**
+    线程需要使用类似信号量（每个表项不同的信号量）或原子操作的同步原语。
+    信号量的耗时通常很高。
+    原子指令的耗时通常高于普通指令。
 
-#.  **Multiple writer threads, with single thread performing table lookup operations and multiple threads performing table entry add/delete operations.**
-    The threads performing table entry add/delete operations send table update requests to the reader (typically through message passing queues),
-    which does the actual table updates and then sends the response back to the request initiator.
+#.  **多个写线程，其中单个线程执行表查找操作，其他线程执行表添加、删除操作**
+    执行表添加、删除操作的线程向读取器发送表更新请求（通常是通过消息队列传递），这些请求执行实际的表更新，然后将相应发送回请求发起者。
 
-#.  **Single writer thread performing table entry add/delete operations and multiple reader threads that perform table lookup operations with read-only access to the table entries.**
-    The reader threads use the main table copy while the writer is updating the mirror copy.
-    Once the writer update is done, the writer can signal to the readers and busy wait until all readers swaps between the mirror copy (which now becomes the main copy) and
-    the mirror copy (which now becomes the main copy).
+#.  **单个写线程执行表项添加、删除操作，多个度线程执行表查找操作，该查表操作只读表项，没有修改表项信息**
+    读线程使用主表的副本，而写线程更新镜像副本。
+    一旦写更新操作完成，写线程发信号给读线程，并等待所有的读线程切换到镜像副本上。
 
-Interfacing with Accelerators
------------------------------
+加速器
+--------
 
-The presence of accelerators is usually detected during the initialization phase by inspecting the HW devices that are part of the system (e.g. by PCI bus enumeration).
-Typical devices with acceleration capabilities are:
+在初始化阶段通常通过检查作为系统一部分的HW设备（如通过PCI枚举操作）来检测加速器的存在。
 
-*   Inline accelerators: NICs, switches, FPGAs, etc;
+具有加速功能的典型设备：
 
-*   Look-aside accelerators: chipsets, FPGAs, etc.
+*   内联加速器：网卡、交换机、FPGA等；
 
-Usually, to support a specific functional block, specific implementation of Packet Framework tables and/or ports and/or actions has to be provided for each accelerator,
-with all the implementations sharing the same API: pure SW implementation (no acceleration), implementation using accelerator A, implementation using accelerator B, etc.
-The selection between these implementations could be done at build time or at run-time (recommended), based on which accelerators are present in the system,
-with no application changes required.
+*   外置加速器：芯片组、FPGA等
+
+通常，为了支持特定功能模块，必须为每个加速器提供Packet Framework表、端口、动作的特定实现，所有实现共享相同的API：纯SW实现（无加速）、使用加速器A、使用加速器B等等。
+这些实现之间的选择可以在构建或者在运行时完成，而不需要该变应用程序。

@@ -28,83 +28,67 @@
     (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
     OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-Port Hotplug Framework
-======================
+端口热插拔框架
+================
 
-The Port Hotplug Framework provides DPDK applications with the ability to
-attach and detach ports at runtime. Because the framework depends on PMD
-implementation, the ports that PMDs cannot handle are out of scope of this
-framework. Furthermore, after detaching a port from a DPDK application, the
-framework doesn't provide a way for removing the devices from the system.
-For the ports backed by a physical NIC, the kernel will need to support PCI
-Hotplug feature.
+端口热插拔框架为DPDK应用程序提供了运行时添加、移除端口的能力。
+由于框架一来PMD实现，所以热插拔的端口必须是PMD支持的端口才行。
+此外，从DPDK程序中移除端口之后，框架并不提供从系统中删除设备的方法。
+对于由物理网卡支持的端口，内核需要支持PCI热插拔功能。
 
-Overview
---------
+概述
+------
 
-The basic requirements of the Port Hotplug Framework are:
+端口热插拔框架的基本要求：
 
-*       DPDK applications that use the Port Hotplug Framework must manage their
-        own ports.
+*       使用端口热插拔框架的DPDK应用程序需要管理其自己的端口。
 
-        The Port Hotplug Framework is implemented to allow DPDK applications to
-        manage ports. For example, when DPDK applications call the port attach
-        function, the attached port number is returned. DPDK applications can
-        also detach the port by port number.
+        端口热插拔矿机被实现为允许DPDK应用程序管理自己的端口。
+        例如，当应用程序调用添加端口的功能时，将返回添加的端口号。
+        DPDK应用程序也可以通过端口号移除该端口。
 
-*       Kernel support is needed for attaching or detaching physical device
-        ports.
+*       内核需要支持待添加、移除的物理设备端口。
 
-        To attach new physical device ports, the device will be recognized by
-        userspace driver I/O framework in kernel at first. Then DPDK
-        applications can call the Port Hotplug functions to attach the ports.
-        For detaching, steps are vice versa.
+        为了添加新的物理设备端口，设备首先被内核中的用户框架IO驱动识别。
+        然后DPDK应用程序可以调用端口热插拔功能来连接端口。
+        移除过程步骤刚好相反。
 
-*       Before detaching, they must be stopped and closed.
+*       移除之前，必须先停止并关闭端口。
 
-        DPDK applications must call "rte_eth_dev_stop()" and
-        "rte_eth_dev_close()" APIs before detaching ports. These functions will
-        start finalization sequence of the PMDs.
+        DPDK应用程序在移除端口之前，必须调用 "rte_eth_dev_stop()" 和 "rte_eth_dev_close()" 函数。
+        这些函数将启动PMD的反初始化过程。
 
-*       The framework doesn't affect legacy DPDK applications behavior.
+*       本框架不会影响传统的DPDK应用程序的行为。
 
-        If the Port Hotplug functions aren't called, all legacy DPDK apps can
-        still work without modifications.
+        如果端口热插拔的功能没有被调用，所有传统的DPDK应用程序仍然可以不加修改地工作。
 
-Port Hotplug API overview
--------------------------
+端口热插拔API概述
+-------------------
 
-*       Attaching a port
+*       添加一个端口
 
-        "rte_eth_dev_attach()" API attaches a port to DPDK application, and
-        returns the attached port number. Before calling the API, the device
-        should be recognized by an userspace driver I/O framework. The API
-        receives a pci address like "0000:01:00.0" or a virtual device name
-        like "net_pcap0,iface=eth0". In the case of virtual device name, the
-        format is the same as the general "--vdev" option of DPDK.
+        "rte_eth_dev_attach()" API 将端口添加到DPDK应用程序，并返回添加的端口号。
+        在调用API之前，设备应该被用户空间驱动IO框架识别。
+        API接收一个类似 "0000:01:00.0" 的pci地址或者是 "net_pcap0,iface=eth0" 这样的虚拟设备名称。
+        在虚拟设备名称情况下，格式与DPDK的一般‘-vdev’选项相同。
 
-*       Detaching a port
+*       移除一个端口
 
-        "rte_eth_dev_detach()" API detaches a port from DPDK application, and
-        returns a pci address of the detached device or a virtual device name
-        of the device.
+        "rte_eth_dev_detach()" API 从DPDK应用程序中移除一个端口，并返回移除的设备的pci地址或虚拟设备名称。
 
-Reference
----------
+引用
+------
 
-        "testpmd" supports the Port Hotplug Framework.
+        "testpmd" 支持端口热插拔框架。
 
-Limitations
------------
+限制
+------
 
-*       The Port Hotplug APIs are not thread safe.
+*       端口热插拔API并不是线程安全的。
 
-*       The framework can only be enabled with Linux. BSD is not supported.
+*       本框架只能在Linux下使能，BSD并不支持。
 
-*       To detach a port, the port should be backed by a device that igb_uio
-        or VFIO manages.
+*       为了移除端口，端口必须是igb_uio或VFIO管理的设备端口。
 
-*       Not all PMDs support detaching feature.
-        To know whether a PMD can support detaching, search for the
-        "RTE_ETH_DEV_DETACHABLE" flag in rte_eth_dev::data::dev_flags. If the flag is
-        defined in the PMD, detaching is supported.
+*       并非所有的PMD都支持移除功能。要知道PMD是否支持移除，请搜索 rte_eth_dev::data::dev_flags 中的 "RTE_ETH_DEV_DETACHABLE" 标志。
+        如果在PMD中定义该标志，则表示支持。

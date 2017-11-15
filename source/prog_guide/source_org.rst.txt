@@ -30,67 +30,73 @@
 
 **Part 2: Development Environment**
 
-源码组织
-==========
+Source Organization
+===================
 
-本节介绍DPDK框架中的源码组织结构。
+This section describes the organization of sources in the DPDK framework.
 
-Makefiles 和 Config
+Makefiles and Config
 --------------------
 
 .. note::
 
-    在本文的描述中 ``RTE_SDK`` 作为环境变量指向DPDK源码包解压出来的文件根目录。
-    参看 :ref:`Useful_Variables_Provided_by_the_Build_System` 获取更多的变量描述。
+    In the following descriptions,
+    ``RTE_SDK`` is the environment variable that points to the base directory into which the tarball was extracted.
+    See
+    :ref:`Useful_Variables_Provided_by_the_Build_System`
+    for descriptions of other variables.
 
-由DPDK库和应用程序提供的 Makefiles 位于 ``$(RTE_SDK)/mk`` 中。
+Makefiles that are provided by the DPDK libraries and applications are located in ``$(RTE_SDK)/mk``.
 
-配置模板位于 ``$(RTE_SDK)/config`` 。这些模板描述了为每个目标启用的选项。
-配置文件许多可以为DPDK库启用或禁用的选项，包括调试选项。
-用户应该查看配置文件并熟悉这些选项。
-配置文件同样也用于创建头文件，创建的头文件将位于新生成的目录中。
+Config templates are located in ``$(RTE_SDK)/config``. The templates describe the options that are enabled for each target.
+The config file also contains items that can be enabled and disabled for many of the DPDK libraries,
+including debug options.
+The user should look at the config file and become familiar with these options.
+The config file is also used to create a header file, which will be located in the new build directory.
 
-库
----
+Libraries
+---------
 
-库文件源码位于目录 ``$(RTE_SDK)/lib`` 中。
-按照惯例，库指的是为应用程序提供API的任何代码。
-通常，它会生成一个 (``.a``) 文件，这个目录中可能也保存一些内核模块。
+Libraries are located in subdirectories of ``$(RTE_SDK)/lib``.
+By convention a library refers to any code that provides an API to an application.
+Typically, it generates an archive file (``.a``), but a kernel module would also go in the same directory.
 
-Lib目标包含如下项目 ::
+The lib directory contains::
 
     lib
-    +-- librte_cmdline      # 命令行接口
-    +-- librte_distributor  # 报文分发器
-    +-- librte_eal          # 环境抽象层
-    +-- librte_ether        # PMD通用接口
-    +-- librte_hash         # 哈希库
-    +-- librte_ip_frag      # IP分片库
-    +-- librte_kni          # 内核NIC接口
-    +-- librte_kvargs       # 参数解析库
-    +-- librte_lpm          # 最长前缀匹配库
-    +-- librte_mbuf         # 报文及控制缓冲区操作库
-    +-- librte_mempool      # 内存池管理器
-    +-- librte_meter        # QoS metering 库
-    +-- librte_net          # IP相关的一些头部
-    +-- librte_power        # 电源管理库
-    +-- librte_ring         # 软件无锁环形缓冲区
-    +-- librte_sched        # QoS调度器和丢包器库
-    +-- librte_timer        # 定时器库
+    +-- librte_cmdline      # Command line interface helper
+    +-- librte_distributor  # Packet distributor
+    +-- librte_eal          # Environment abstraction layer
+    +-- librte_ether        # Generic interface to poll mode driver
+    +-- librte_hash         # Hash library
+    +-- librte_ip_frag      # IP fragmentation library
+    +-- librte_kni          # Kernel NIC interface
+    +-- librte_kvargs       # Argument parsing library
+    +-- librte_lpm          # Longest prefix match library
+    +-- librte_mbuf         # Packet and control mbuf manipulation
+    +-- librte_mempool      # Memory pool manager (fixed sized objects)
+    +-- librte_meter        # QoS metering library
+    +-- librte_net          # Various IP-related headers
+    +-- librte_power        # Power management library
+    +-- librte_ring         # Software rings (act as lockless FIFOs)
+    +-- librte_sched        # QoS scheduler and dropper library
+    +-- librte_timer        # Timer library
 
-驱动
-------
+Drivers
+-------
 
-驱动程序是为设备（硬件设备或者虚拟设备）提供轮询模式驱动程序实现的特殊库。
-他们包含在 *drivers* 子目录中，按照类型分类，各自编译成一个库，其格式为 ``librte_pmd_X.a`` ，其中 ``X`` 是驱动程序的名称。
+Drivers are special libraries which provide poll-mode driver implementations for
+devices: either hardware devices or pseudo/virtual devices. They are contained
+in the *drivers* subdirectory, classified by type, and each compiles to a
+library with the format ``librte_pmd_X.a`` where ``X`` is the driver name.
 
-驱动程序目录下有个 *net* 子目录，包括如下项目::
+The drivers directory has a *net* subdirectory which contains::
 
     drivers/net
-    +-- af_packet          # 基于Linux af_packet的pmd
-    +-- bonding            # 绑定pmd驱动
-    +-- cxgbe              # Chelsio Terminator 10GbE/40GbE pmd
-    +-- e1000              # 1GbE pmd (igb and em)
+    +-- af_packet          # Poll mode driver based on Linux af_packet
+    +-- bonding            # Bonding poll mode driver
+    +-- cxgbe              # Chelsio Terminator 10GbE/40GbE poll mode driver
+    +-- e1000              # 1GbE poll mode drivers (igb and em)
     +-- enic               # Cisco VIC Ethernet NIC Poll-mode Driver
     +-- fm10k              # Host interface PMD driver for FM10000 Series
     +-- i40e               # 40GbE poll mode driver
@@ -106,17 +112,21 @@ Lib目标包含如下项目 ::
 
 .. note::
 
-   部分 ``driver/net`` 目录包含一个 ``base`` 子目录，这个目录通常包含用户不能直接修改的代码。
-   任何修订或增强都应该 ``X_osdep.c`` 或 ``X_osdep.h`` 文件完成。
-   请参阅base目录中本地的自述文件以获取更多的信息。
+   Several of the ``driver/net`` directories contain a ``base``
+   sub-directory. The ``base`` directory generally contains code the shouldn't
+   be modified directly by the user. Any enhancements should be done via the
+   ``X_osdep.c`` and/or ``X_osdep.h`` files in that directory. Refer to the
+   local README in the base directories for driver specific instructions.
 
-应用程序
-----------
 
-应用程序是包含 ``main()`` 函数的源文件。
-他们位于 ``$(RTE_SDK)/app`` 和 ``$(RTE_SDK)/examples`` 目录中。
+Applications
+------------
 
-应用程序目录包含用于测试DPPDK（如自动测试）或轮询模式驱动程序（test-pmd）的实例应用程序::
+Applications are source files that contain a ``main()`` function.
+They are located in the ``$(RTE_SDK)/app`` and ``$(RTE_SDK)/examples`` directories.
+
+The app directory contains sample applications that are used to test DPDK (such as autotests)
+or the Poll Mode Drivers (test-pmd)::
 
     app
     +-- chkincs            # Test program to check include dependencies
@@ -126,7 +136,7 @@ Lib目标包含如下项目 ::
     +-- test-pipeline      # Test the IP Pipeline framework
     +-- test-pmd           # Test and benchmark poll mode drivers
 
-Example目录包含示例应用程序，显示了如何使用库::
+The examples directory contains sample applications that show how libraries can be used::
 
     examples
     +-- cmdline            # Example of using the cmdline library
@@ -152,5 +162,5 @@ Example目录包含示例应用程序，显示了如何使用库::
 
 .. note::
 
-    实际的实例目录可能与上面显示的有所出入。
-    相关详细信息，请参考最新的DPDK代码。
+    The actual examples directory may contain additional sample applications to those shown above.
+    Check the latest DPDK source files for details.

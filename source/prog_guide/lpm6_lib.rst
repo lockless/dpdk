@@ -28,85 +28,51 @@
     (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
     OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-LPM6 Library
-============
+LPM6库
+=======
 
-The LPM6 (LPM for IPv6) library component implements the Longest Prefix Match (LPM) table search method for 128-bit keys
-that is typically used to find the best match route in IPv6 forwarding applications.
+LPM6（LPM for IPv6）库组件实现了128位Key的最长前缀匹配表查找方法，该方法通常用于在IPv6转发应用程序中找到最佳匹配路由。
 
-LPM6 API Overview
+LPM6 API概述
 -----------------
 
-The main configuration parameters for the LPM6 library are:
+LPM6库主要配置参数有：
 
-*   Maximum number of rules: This defines the size of the table that holds the rules,
-    and therefore the maximum number of rules that can be added.
+*   支持的LPM规则最大数目：这定义了保存规则的表的大小，也就是最多可以添加的规则数目。
 
-*   Number of tbl8s: A tbl8 is a node of the trie that the LPM6 algorithm is based on.
+*   tbl8的数量：tbl8是trie的一个节点，是LPM6算法的基础。
 
-This parameter is related to the number of rules you can have,
-but there is no way to accurately predict the number needed to hold a specific number of rules,
-since it strongly depends on the depth and IP address of every rule.
-One tbl8 consumes 1 kb of memory. As a recommendation, 65536 tbl8s should be sufficient to store
-several thousand IPv6 rules, but the number can vary depending on the case.
+tbl8与您可以拥有的规则数量相关，但无法准确预测持有特定数量规则所需的空间，因为它强烈依赖于每个规则的深度和IP地址。一个tbl8消耗1 kb的内存。作为推荐，65536个tbl8应该足以存储数千个IPv6规则，但可能因情况而异。
 
-An LPM prefix is represented by a pair of parameters (128-bit key, depth), with depth in the range of 1 to 128.
-An LPM rule is represented by an LPM prefix and some user data associated with the prefix.
-The prefix serves as the unique identifier for the LPM rule.
-In this implementation, the user data is 21-bits long and is called "next hop",
-which corresponds to its main use of storing the ID of the next hop in a routing table entry.
+LPM前缀由一对参数（128位Key，深度）表示，深度范围为1到128。LPM规则由LPM前缀和与前缀相关联的一些用户数据表示。该前缀作为LPM规则的唯一标识符。在当前实现中，用户数据为21位长，称为“下一跳”，对应于其主要用途，用于存储路由表条目中下一跳的ID。
 
-The main methods exported for the LPM component are:
+为LPM组件导出的主要方法有：
 
-*   Add LPM rule: The LPM rule is provided as input.
-    If there is no rule with the same prefix present in the table, then the new rule is added to the LPM table.
-    If a rule with the same prefix is already present in the table, the next hop of the rule is updated.
-    An error is returned when there is no available space left.
+*   添加LPM规则：LPM规则作为输入参数。如果表中没有存在相同前缀的规则，则将新规则添加到LPM表中。如果表中已经存在具有相同前缀的规则，则会更新规则的下一跳。当没有可用空间时返回错误。
 
-*   Delete LPM rule: The prefix of the LPM rule is provided as input.
-    If a rule with the specified prefix is present in the LPM table, then it is removed.
+*   删除LPM规则：LPM前缀作为输入参数。如果具有指定前缀的规则存在于LPM表中，则会被删除。
 
-*   Lookup LPM key: The 128-bit key is provided as input.
-    The algorithm selects the rule that represents the best match for the given key and returns the next hop of that rule.
-    In the case that there are multiple rules present in the LPM table that have the same 128-bit value,
-    the algorithm picks the rule with the highest depth as the best match rule,
-    which means the rule has the highest number of most significant bits matching between the input key and the rule key.
+*   查找LPM规则：128位Key作为输入参数。该算法选择代表给定Key的最佳匹配的规则，并返回该规则的下一跳。在LPM表中存在多个具有相同128位Key值的规则的情况下，算法选择最高深度的规则作为最佳匹配规则，这意味着该规则在输入键和规则Key之间具有最高有效位数匹配。
 
-Implementation Details
-~~~~~~~~~~~~~~~~~~~~~~
+实现细节
+~~~~~~~~~~
 
-This is a modification of the algorithm used for IPv4 (see :ref:`lpm4_details`).
-In this case, instead of using two levels, one with a tbl24 and a second with a tbl8, 14 levels are used.
+这个实现是用IPv4的算法做的修改（参见IPv4 LPM实现细节）。在这种情况下，不是使用两级表，而是使用一级的tbl24和14级的tbl8。
 
-The implementation can be seen as a multi-bit trie where the *stride*
-or number of bits inspected on each level varies from level to level.
-Specifically, 24 bits are inspected on the root node, and the remaining 104 bits are inspected in groups of 8 bits.
-This effectively means that the trie has 14 levels at the most, depending on the rules that are added to the table.
+该实现可以看作是一个Multi-bit trie，在每个级别上检查的步长或位数根据级别有所不同。具体来说，在根节点检查24位，剩下的104位以8位的组进行检查。这意味根据添加到表中的规则，该trie最多具有14个级。
 
-The algorithm allows the lookup operation to be performed with a number of memory accesses
-that directly depends on the length of the rule and
-whether there are other rules with bigger depths and the same key in the data structure.
-It can vary from 1 to 14 memory accesses, with 5 being the average value for the lengths
-that are most commonly used in IPv6.
+该算法允许用户直接通过存储器访问操作来执行规则查找，存储器访问次数直接取决于规则长度，以及在数据结构中是否存在具有较大深度的其他规则和相同的Key。它可以在1到14次访存操作之间变化，IPv6中最常用的长度的平均值为5次访问操作。
+主要数据结构使用以下元素构建：
 
-The main data structure is built using the following elements:
+*   一个有224个条目的表
 
-*   A table with 224 entries
+*   具有28个条目的表，表的数目由API配置
 
-*   A number of tables, configurable by the user through the API, with 28 entries
+第一个表称为tbl24，使用要查找的IP地址的前24位进行索引，其余表称为tbl8，使用IP地址的其余字节进行索引，大小为8位。这意味着尝试将输入数据包的IP地址与存储在tbl24或后续tbl8中的规则进行匹配的结果，我们可能需要在较深级别的树中继续查找过程。
 
-The first table, called tbl24, is indexed using the first 24 bits of the IP address be looked up,
-while the rest of the tables, called tbl8s,
-are indexed using the rest of the bytes of the IP address, in chunks of 8 bits.
-This means that depending on the outcome of trying to match the IP address of an incoming packet to the rule stored in the tbl24
-or the subsequent tbl8s we might need to continue the lookup process in deeper levels of the tree.
+类似于IPv4算法中的限制，为了存储所有可能的IPv6规则，我们需要一个具有2 ^ 128个条目的表。 由于资源限制，这显然是不可行的。
 
-Similar to the limitation presented in the algorithm for IPv4,
-to store every possible IPv6 rule, we would need a table with 2^128 entries.
-This is not feasible due to resource restrictions.
-
-By splitting the process in different tables/levels and limiting the number of tbl8s,
-we can greatly reduce memory consumption while maintaining a very good lookup speed (one memory access per level).
+通过将查找过程分成不同的表/级别并限制tbl8的数量，我们可以大大减少内存消耗，同时保持非常好的查找速度（每级一个内存访问）。
 
 
 .. figure:: img/tbl24_tbl8_tbl8.*
@@ -114,122 +80,78 @@ we can greatly reduce memory consumption while maintaining a very good lookup sp
    Table split into different levels
 
 
-An entry in a table contains the following fields:
+表中的条目包含以下字段：
 
-*   next hop / index to the tbl8
+* 下一跳信息或者tbl8索引
+* 规则深度
+* 有效标志
+* 有效组标志
+* 外部条目标志
 
-*   depth of the rule (length)
+第一个字段可以包含指示查找过程应该继续的tbl8的索引，或者如果已经找到最长的前缀匹配，则可以包含下一跳本身。规则的深度或长度是存储在特定条目中的规则的位数。标志位用于确定条目/表是否有效以及搜索过程是否分别完成。
+两种类型的表共享相同的结构。
 
-*   valid flag
+另一个主要数据结构是一个包含规则（IP，下一跳和深度）的主要信息的表。这是一个更高级别的表，用于不同的目的：
 
-*   valid group flag
+*   在添加或删除之前，检查规则是否已经存在，而无需实际执行查找。
 
-*   external entry flag
+删除时，检查是否存在包含要删除的规则是很重要的，因为主数据结构必须相应更新。
 
-The first field can either contain a number indicating the tbl8 in which the lookup process should continue
-or the next hop itself if the longest prefix match has already been found.
-The depth or length of the rule is the number of bits of the rule that is stored in a specific entry.
-The flags are used to determine whether the entry/table is valid or not
-and whether the search process have finished or not respectively.
-
-Both types of tables share the same structure.
-
-The other main data structure is a table containing the main information about the rules (IP, next hop and depth).
-This is a higher level table, used for different things:
-
-*   Check whether a rule already exists or not, prior to addition or deletion,
-    without having to actually perform a lookup.
-
-When deleting, to check whether there is a rule containing the one that is to be deleted.
-This is important, since the main data structure will have to be updated accordingly.
-
-Addition
+添加
 ~~~~~~~~
 
-When adding a rule, there are different possibilities.
-If the rule's depth is exactly 24 bits, then:
+添加规则时存在不同的可能性。如果规则的深度恰好是24位，那么：
 
-*   Use the rule (IP address) as an index to the tbl24.
+*   添加规则时存在不同的可能性。如果规则的深度恰好是24位，那么：
 
-*   If the entry is invalid (i.e. it doesn't already contain a rule) then set its next hop to its value,
-    the valid flag to 1 (meaning this entry is in use),
-    and the external entry flag to 0 (meaning the lookup process ends at this point,
-    since this is the longest prefix that matches).
+*   如果条目无效（即表中原来不包含规则），则将其下一跳设置为其值，将有效标志设置为1（表示此条目正在使用中），并将外部条目标志设置为0（表示查找过程结束，因为这是匹配的最长的前缀）。
 
-If the rule's depth is bigger than 24 bits but a multiple of 8, then:
+如果规则的深度大于24位，但倍数为8，则：
 
-*   Use the first 24 bits of the rule as an index to the tbl24.
+*   使用规则（IP地址）作为tbl24的索引。
 
-*   If the entry is invalid (i.e. it doesn't already contain a rule) then look for a free tbl8,
-    set the index to the tbl8 to this value,
-    the valid flag to 1 (meaning this entry is in use),
-    and the external entry flag to 1
-    (meaning the lookup process must continue since the rule hasn't been explored completely).
+*   如果条目无效（即它不包含规则），则查找一个空闲的tbl8，将该值的tbl8的索引设置为该值，将有效标志设置为1（表示此条目正在使用中），并将外部条目标志为1（意味着查找过程必须继续，因为规则尚未被完全探测）。
 
-*   Use the following 8 bits of the rule as an index to the next tbl8.
+*   使用规则的下8位作为下一个tbl8的索引。
 
-*   Repeat the process until the tbl8 at the right level (depending on the depth) has been reached
-    and fill it with the next hop, setting the next entry flag to 0.
+*   重复该过程，直到达到正确级别的tbl8（取决于深度），并将其填充到下一跳，将下一个条目标志设置为0。
 
-If the rule's depth is any other value, prefix expansion must be performed.
-This means the rule is copied to all the entries (as long as they are not in use) which would also cause a match.
+如果规则的深度是其他值，则必须执行前缀扩展。这意味着规则被复制到所有条目（尽管它们不被使用）以实现致匹配。
 
-As a simple example, let's assume the depth is 20 bits.
-This means that there are 2^(24-20) = 16 different combinations of the first 24 bits of an IP address that would cause a match.
-Hence, in this case, we copy the exact same entry to every position indexed by one of these combinations.
+举一个简单的例子，我们假设深度是20位。这意味着有可能导致匹配的IP地址的前24位的2 ^（24-20）= 16种不同的组合。因此，在这种情况下，我们将完全相同的条目复制到由这些组合索引的每个位置。
 
-By doing this we ensure that during the lookup process, if a rule matching the IP address exists,
-it is found in, at the most, 14 memory accesses,
-depending on how many times we need to move to the next table.
-Prefix expansion is one of the keys of this algorithm, since it improves the speed dramatically by adding redundancy.
+通过这样做，我们确保在查找过程中，如果存在与IP地址匹配的规则，则最多可以在14个内存访问中找到，具体取决于需要移动到下一个表的次数。前缀扩展是该算法的关键之一，因为它通过添加冗余显著提高速度。
 
-Prefix expansion can be performed at any level.
-So, for example, is the depth is 34 bits, it will be performed in the third level (second tbl8-based level).
+前缀扩展可以在任何级别执行。因此，例如，深度是34位，它将在第三级（第二个基于tbl8的级别）执行。
 
-Lookup
+查询
 ~~~~~~
 
-The lookup process is much simpler and quicker. In this case:
+查找过程要简单得多，速度更快。在这种情况下：
 
-*   Use the first 24 bits of the IP address as an index to the tbl24.
-    If the entry is not in use, then it means we don't have a rule matching this IP.
-    If it is valid and the external entry flag is set to 0, then the next hop is returned.
+*   使用IP地址的前24位作为tbl24的索引。如果该条目未被使用，那么这意味着我们没有匹配此IP的规则。如果它有效并且外部条目标志设置为0，则返回下一跳。
 
-*   If it is valid and the external entry flag is set to 1, then we use the tbl8 index to find out the tbl8 to be checked,
-    and the next 8 bits of the IP address as an index to this table.
-    Similarly, if the entry is not in use, then we don't have a rule matching this IP address.
-    If it is valid then check the external entry flag for a new tbl8 to be inspected.
+*   如果它有效并且外部条目标志被设置为1，那么我们使用tbl8索引来找出要检查的tbl8，并且将该IP地址的下一个8位作为该表的索引。类似地，如果条目未被使用，那么我们没有与该IP地址匹配的规则。如果它是有效的，那么检查外部条目标志以检查新的tbl8。
 
-*   Repeat the process until either we find an invalid entry (lookup miss) or a valid entry with the external entry flag set to 0.
-    Return the next hop in the latter case.
+*   重复该过程，直到找到无效条目（查找未命中）或外部条目标志设置为0的有效条目。在后一种情况下返回下一跳。
 
-Limitations in the Number of Rules
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+规则数目限制
+~~~~~~~~~~~~~~~
 
-There are different things that limit the number of rules that can be added.
-The first one is the maximum number of rules, which is a parameter passed through the API.
-Once this number is reached, it is not possible to add any more rules to the routing table unless one or more are removed.
+有不同的因素限制可以添加的规则数量。第一个是规则的最大数量，这是通过API传递的参数。一旦达到这个数字，就不可能再添加任何更多的规则到路由表，除非有一个或多个删除。
 
-The second limitation is in the number of tbl8s available.
-If we exhaust tbl8s, we won't be able to add any more rules.
-How to know how many of them are necessary for a specific routing table is hard to determine in advance.
+第二个限制是可用的tbl8数量。如果我们耗尽tbl8s，我们将无法再添加任何规则。很难提前确定其中有多少是特定的路由表所必需的。
 
-In this algorithm, the maximum number of tbl8s a single rule can consume is 13,
-which is the number of levels minus one, since the first three bytes are resolved in the tbl24. However:
+在该算法中，单个规则可以消耗的tbl8的最大数量为13，这是级别数减1，因为前三个字节在tbl24中被解析。然而：
 
-*   Typically, on IPv6, routes are not longer than 48 bits, which means rules usually take up to 3 tbl8s.
+*   通常，在IPv6上，路由不超过48位，这意味着规则通常需要3个tbl8。
 
-As explained in the LPM for IPv4 algorithm, it is possible and very likely that several rules will share one or more tbl8s,
-depending on what their first bytes are.
-If they share the same first 24 bits, for instance, the tbl8 at the second level will be shared.
-This might happen again in deeper levels, so, effectively,
-two 48 bit-long rules may use the same three tbl8s if the only difference is in their last byte.
+如在LPM for IPv4算法中所解释的，根据它们的第一个字节是多少，很可能会有几个规则共享一个或多个tbl8。如果它们共享相同的前24位，例如，第二级的tbl8将被共享。这可能会在更深的级别再次发生，所以有效的是，如果两个48位长的规则在最后一个字节中唯一的区别就可能使用相同的三个tbl8。
 
-The number of tbl8s is a parameter exposed to the user through the API in this version of the algorithm,
-due to its impact in memory consumption and the number or rules that can be added to the LPM table.
-One tbl8 consumes 1 kilobyte of memory.
+由于其对内存消耗的影响以及可以添加到LPM表中的数量或规则，tbl8的数量是在该版本的算法中通过API暴露给用户的参数。一个tbl8消耗1KB的内存。
 
-Use Case: IPv6 Forwarding
--------------------------
+用例：IPv6转发
+----------------
 
-The LPM algorithm is used to implement the Classless Inter-Domain Routing (CIDR) strategy used by routers implementing IP forwarding.
+LPM算法用于实现实现IP转发的路由器所使用的无类别域间路由（CIDR）策略。
+

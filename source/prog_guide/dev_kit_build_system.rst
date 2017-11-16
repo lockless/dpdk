@@ -57,7 +57,6 @@ DPDK 需要一个构建系统用于编译等操作。
 可以存在几个构建目录共享源码，但是配置不一样的情况。
 
 例如，要使用配置模板 config/defconfig_x86_64-linuxapp 创建一个名为 my_sdk_build_dir 的构建目录，我们使用如下命令：
-we use:
 
 .. code-block:: console
 

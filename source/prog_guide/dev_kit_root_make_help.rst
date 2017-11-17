@@ -30,43 +30,43 @@
 
 .. _Development_Kit_Root_Makefile_Help:
 
-Development Kit Root Makefile Help
-==================================
+DPDK 根目录 Makefile 理解
+==========================
 
-The DPDK provides a root level Makefile with targets for configuration, building, cleaning, testing, installation and others.
-These targets are explained in the following sections.
+DPDK提供了一个根目录级别的Makefile，包含配置，构建，清理，测试，安装等目的。
+这些操作将在下面的部分中进行解释。
 
-Configuration Targets
----------------------
+配置 Targets
+--------------
 
-The configuration target requires the name of the target, which is specified using T=mytarget and it is mandatory.
-The list of available targets are in $(RTE_SDK)/config (remove the defconfig _ prefix).
+配置 target 需要使用 T=mytarget 指定target的名称，这个操作不能省略。
+可用的target列表位于 $(RTE_SDK)/config 中(移除defconfig _ 前缀)。
 
-Configuration targets also support the specification of the name of the output directory, using O=mybuilddir.
-This is an optional parameter, the default output directory is build.
+配置target还支持使用 O=mybuilddir 来指定输出目录的名称。
+这是一个可选配置，默认的输出目录是build。
 
 *   Config
 
-    This will create a build directory, and generates a configuration from a template.
-    A Makefile is also created in the new build directory.
+    这将创建一个构建目录，并从模板中生成一个配置。
+    同时会在构建目录下生成一个 Makefile 文件。
 
-    Example:
+    例如：
 
     .. code-block:: console
 
         make config O=mybuild T=x86_64-native-linuxapp-gcc
 
-Build Targets
+构建 Targets
 -------------
 
-Build targets support the optional specification of the name of the output directory, using O=mybuilddir.
-The default output directory is build.
+构建 targets 支持输出目录名称可选规则，使用 O=mybuilddir。
+默认的输出目录是build。
 
 *   all, build or just make
 
-    Build the DPDK in the output directory previously created by a make config.
+    在前面由make config创建的目录上构建DPDK。
 
-    Example:
+    例如：
 
     .. code-block:: console
 
@@ -74,9 +74,9 @@ The default output directory is build.
 
 *   clean
 
-    Clean all objects created using make build.
+    清除所有由 make build 生成的目标文件。
 
-    Example:
+    例如：
 
     .. code-block:: console
 
@@ -84,9 +84,9 @@ The default output directory is build.
 
 *   %_sub
 
-    Build a subdirectory only, without managing dependencies on other directories.
+    只构建某个目录，而不管对其他目录的依赖性。
 
-    Example:
+    例如：
 
     .. code-block:: console
 
@@ -94,98 +94,98 @@ The default output directory is build.
 
 *   %_clean
 
-    Clean a subdirectory only.
+    清除对子目录的构建操作结果。
 
-    Example:
+    例如：
 
     .. code-block:: console
 
         make lib/librte_eal_clean O=mybuild
 
-Install Targets
----------------
+安装 Targets
+-------------
 
 *   Install
 
-    The list of available targets are in $(RTE_SDK)/config (remove the defconfig\_ prefix).
+    可用的 targets 列表位于 $(RTE_SDK)/config (移除 defconfig\_ 前缀).
 
-    The GNU standards variables may be used:
-    http://gnu.org/prep/standards/html_node/Directory-Variables.html and
+    可以使用 GNU 标准的变量：
+    http://gnu.org/prep/standards/html_node/Directory-Variables.html 和
     http://gnu.org/prep/standards/html_node/DESTDIR.html
 
-    Example:
+    例如：
 
     .. code-block:: console
 
         make install DESTDIR=myinstall prefix=/usr
 
-Test Targets
+测试 Targets
 ------------
 
 *   test
 
-    Launch automatic tests for a build directory specified using O=mybuilddir.
-    It is optional, the default output directory is build.
+    对使用 O=mybuilddir 指定的构建目录启动自动测试。
+    这是可选的，默认的输出目录是build。
 
-    Example:
+    例如：
 
     .. code-block:: console
 
         make test O=mybuild
 
-Documentation Targets
----------------------
+文档 Targets
+--------------
 
 *   doc
 
-    Generate the documentation (API and guides).
+    生成文档（API和指南）。
 
 *   doc-api-html
 
-    Generate the Doxygen API documentation in html.
+    在html中生成Doxygen API文档。
 
 *   doc-guides-html
 
-    Generate the guides documentation in html.
+    在html中生成指南文档。
 
 *   doc-guides-pdf
 
-    Generate the guides documentation in pdf.
+    用pdf生成指南文档。
 
-Misc Targets
-------------
+其他 Targets
+-------------
 
 *   help
 
-    Show a quick help.
+    显示快速帮助。
 
-Other Useful Command-line Variables
------------------------------------
+其他有用的命令行变量
+----------------------
 
-The following variables can be specified on the command line:
+以下变量可以在命令行中指定：
 
 *   V=
 
-    Enable verbose build (show full compilation command line, and some intermediate commands).
+    启用详细构建（显示完整的编译命令行和一些中间命令）。
 
 *   D=
 
-    Enable dependency debugging. This provides some useful information about why a target is built or not.
+    启用依赖关系调试。 这提供了一些关于为什么构建目标的有用信息。
 
 *   EXTRA_CFLAGS=, EXTRA_LDFLAGS=, EXTRA_LDLIBS=, EXTRA_ASFLAGS=, EXTRA_CPPFLAGS=
 
-    Append specific compilation, link or asm flags.
+    附加特定的编译，链接或汇编标志。
 
 *   CROSS=
 
-    Specify a cross toolchain header that will prefix all gcc/binutils applications. This only works when using gcc.
+    指定一个交叉工具链头部，该头部将作为所有gcc/binutils应用程序的前缀。这只适用于使用gcc。
 
-Make in a Build Directory
--------------------------
+在需要构建的目录中执行Make
+---------------------------
 
-All targets described above are called from the SDK root $(RTE_SDK).
-It is possible to run the same Makefile targets inside the build directory.
-For instance, the following command:
+上面描述的所有目标都是从SDK根目录 $(RTE_SDK) 调用的。
+也可以在build目录中运行相同的Makefile target。
+例如，下面的命令：
 
 .. code-block:: console
 
@@ -193,7 +193,7 @@ For instance, the following command:
     make config O=mybuild T=x86_64-native-linuxapp-gcc
     make O=mybuild
 
-is equivalent to:
+相当于：
 
 .. code-block:: console
 
@@ -204,11 +204,10 @@ is equivalent to:
     # no need to specify O= now
     make
 
-Compiling for Debug
+编译为调试 Target
 -------------------
 
-To compile the DPDK and sample applications with debugging information included and the optimization level set to 0,
-the EXTRA_CFLAGS environment variable should be set before compiling as follows:
+要编译包含调试信息和优化级别设置为0的DPDK和示例应用程序，应在编译之前设置EXTRA_CFLAGS环境变量，如下所示：
 
 .. code-block:: console
 

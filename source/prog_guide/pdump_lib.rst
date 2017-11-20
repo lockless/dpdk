@@ -30,94 +30,60 @@
 
 .. _pdump_library:
 
-The librte_pdump Library
-========================
+Librte_pdump库
+================
 
-The ``librte_pdump`` library provides a framework for packet capturing in DPDK.
-The library does the complete copy of the Rx and Tx mbufs to a new mempool and
-hence it slows down the performance of the applications, so it is recommended
-to use this library for debugging purposes.
+``librte_pdump`` 库为DPDK中的数据包捕获提供了一个框架。该库将Rx和Tx mbufs的完整复制到新的mempool，因此会降低应用程序的性能，故建议只使用该库进行调试。
 
-The library provides the following APIs to initialize the packet capture framework, to enable
-or disable the packet capture, and to uninitialize it:
+该库提供以下API来初始化数据包捕获框架，启用或禁用数据包捕获，或者对其进行反初始化：
 
 * ``rte_pdump_init()``:
-  This API initializes the packet capture framework.
+  初始化数据包捕获框架。
 
 * ``rte_pdump_enable()``:
-  This API enables the packet capture on a given port and queue.
-  Note: The filter option in the API is a place holder for future enhancements.
+  在给定的端口和队列上进行数据包捕获。注意：API中的过滤器选项是用于未来增强功能的占位符。
 
 * ``rte_pdump_enable_by_deviceid()``:
-  This API enables the packet capture on a given device id (``vdev name or pci address``) and queue.
-  Note: The filter option in the API is a place holder for future enhancements.
+  启用在给定设备ID（vdev名称或pci地址）和队列上的数据包捕获。 注意：API中的过滤器选项是用于未来增强功能的占位符。
 
 * ``rte_pdump_disable()``:
-  This API disables the packet capture on a given port and queue.
+  禁用给定端口和队列上的数据包捕获。
 
 * ``rte_pdump_disable_by_deviceid()``:
-  This API disables the packet capture on a given device id (``vdev name or pci address``) and queue.
+  禁用给定设备ID（vdev名称或pci地址）和队列上的数据包捕获。
 
 * ``rte_pdump_uninit()``:
-  This API uninitializes the packet capture framework.
+  反初始化数据包捕获框架。
 
 * ``rte_pdump_set_socket_dir()``:
-  This API sets the server and client socket paths.
-  Note: This API is not thread-safe.
+  设置服务器和客户端套接字路径。注意：此API不是线程安全的。
 
 
-Operation
----------
+操作
+-----
 
-The ``librte_pdump`` library works on a client/server model. The server is responsible for enabling or
-disabling the packet capture and the clients are responsible for requesting the enabling or disabling of
-the packet capture.
+librte_pdump库适用于客户端/服务器型号。服务器负责启用或禁用数据包捕获，客户端负责请求启用或禁用数据包捕获。
 
-The packet capture framework, as part of its initialization, creates the pthread and the server socket in
-the pthread. The application that calls the framework initialization will have the server socket created,
-either under the path that the application has passed or under the default path i.e. either ``/var/run/.dpdk`` for
-root user or ``~/.dpdk`` for non root user.
+数据包捕获框架作为程序初始化的一部分，在pthread中创建pthread和服务器套接字。调用框架初始化的应用程序将创建服务器套接字，可能是在应用程序传入的路径，也可能是默认路径（root用户的/var/run/.dpdk，非root用户～/.dpdk）下创建。
 
-Applications that request enabling or disabling of the packet capture will have the client socket created either under
-the path that the application has passed or under the default path i.e. either ``/var/run/.dpdk`` for root user or
-``~/.dpdk`` for not root user to send the requests to the server. The server socket will listen for client requests for
-enabling or disabling the packet capture.
+请求启用或禁用数据包捕获的应用程序将在应用程序传入的路径下或默认路径（root用户的/var/run/.dpdk，非root用户～/.dpdk）下创建客户机套接字，用户将请求发送到服务器。服务器套接字将监听用于启用或禁用数据包捕获的客户端请求。
 
 
-Implementation Details
-----------------------
+实现细节
+----------
 
-The library API ``rte_pdump_init()``, initializes the packet capture framework by creating the pthread and the server
-socket. The server socket in the pthread context will be listening to the client requests to enable or disable the
-packet capture.
+库API rte_pdump_init()通过创建pthread和服务器套接字来初始化数据包捕获框架。pthread上下文中的服务器套接字将监听客户端请求以启用或禁用数据包捕获。
 
-The library APIs ``rte_pdump_enable()`` and ``rte_pdump_enable_by_deviceid()`` enables the packet capture.
-On each call to these APIs, the library creates a separate client socket, creates the "pdump enable" request and sends
-the request to the server. The server that is listening on the socket will take the request and enable the packet capture
-by registering the Ethernet RX and TX callbacks for the given port or device_id and queue combinations.
-Then the server will mirror the packets to the new mempool and enqueue them to the rte_ring that clients have passed
-to these APIs. The server also sends the response back to the client about the status of the request that was processed.
-After the response is received from the server, the client socket is closed.
+库API rte_pdump_enable()和rte_pdump_enable_by_deviceid()启用数据包捕获。每次调用这些API时，库创建一个单独的客户端套接字，生成“pdump enable”请求，并将请求发送到服务器。在套接字上监听的服务器将通过对给定的端口或设备ID和队列组合的以太网Rx/TX注册回调函数来接收请求并启用数据包捕获。然后，服务器将镜像数据包到新的mempool并将它们入队到客户端传递给这些API的rte_ring。服务器还将响应发送回客户端，以了解处理过的请求的状态。从服务器收到响应后，客户端套接字关闭。
 
-The library APIs ``rte_pdump_disable()`` and ``rte_pdump_disable_by_deviceid()`` disables the packet capture.
-On each call to these APIs, the library creates a separate client socket, creates the "pdump disable" request and sends
-the request to the server. The server that is listening on the socket will take the request and disable the packet
-capture by removing the Ethernet RX and TX callbacks for the given port or device_id and queue combinations. The server
-also sends the response back to the client about the status of the request that was processed. After the response is
-received from the server, the client socket is closed.
+库API rte_pdump_disable()和rte_pdump_disable_by_deviceid()禁用数据包捕获。每次调用这些API时，库会创建一个单独的客户端套接字，生成“pdump disable”请求，并将请求发送到服务器。正在监听套接字的服务器将通过对给定端口或设备ID和队列组合的以太网RX和TX删除回调函数来执行请求并禁用数据包捕获。服务器还将响应发送回客户端，以了解处理过的请求的状态。从服务器收到响应后，客户端套接字关闭。
 
-The library API ``rte_pdump_uninit()``, uninitializes the packet capture framework by closing the pthread and the
-server socket.
+库API rte_pdump_uninit()通过关闭pthread和服务器套接字来初始化数据包捕获框架。
 
-The library API ``rte_pdump_set_socket_dir()``, sets the given path as either server socket path
-or client socket path based on the ``type`` argument of the API.
-If the given path is ``NULL``, default path will be selected, i.e. either ``/var/run/.dpdk`` for root user or ``~/.dpdk``
-for non root user. Clients also need to call this API to set their server socket path if the server socket
-path is different from default path.
+库API rte_pdump_set_socket_dir()根据API的类型参数将给定路径设置为服务器套接字路径或客户端套接字路径。如果给定路径为NULL，则将选择默认路径（即root用户的/var/run/.dpdk或非root用户的～/.dpdk）。如果服务器套接字路径与默认路径不同，客户端还需要调用此API来设置其服务器套接字路径。
 
 
-Use Case: Packet Capturing
---------------------------
+用例:抓包
+-----------
 
-The DPDK ``app/pdump`` tool is developed based on this library to capture packets in DPDK.
-Users can use this as an example to develop their own packet capturing tools.
+DPDK应用程序/pdump工具是基于此库开发的，用于捕获DPDK中的数据包。用户可以用它来开发自己的数据包捕获工具。

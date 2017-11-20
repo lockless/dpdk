@@ -28,51 +28,35 @@
     (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
     OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-Packet Distributor Library
-==========================
+报文分发库
+=============
 
-The DPDK Packet Distributor library is a library designed to be used for dynamic load balancing of traffic
-while supporting single packet at a time operation.
-When using this library, the logical cores in use are to be considered in two roles: firstly a distributor lcore,
-which is responsible for load balancing or distributing packets,
-and a set of worker lcores which are responsible for receiving the packets from the distributor and operating on them.
-The model of operation is shown in the diagram below.
+DPDK报文分发器是一种库，用于在一次 操作中获取单个数据包，以支持流量的动态负载均衡。当使用这个库时，需要考虑两种角色的逻辑核：首先是负责负载均衡及分发数据包的分发逻辑核，另一个是一组工作逻辑核，负责接收来自分发逻辑核的数据包并对其进行操作。
+
+操作模式如下图所示：
 
 .. figure:: img/packet_distributor1.*
 
    Packet Distributor mode of operation
 
-There are two modes of operation of the API in the distributor library,
-one which sends one packet at a time to workers using 32-bits for flow_id,
-and an optimized mode which sends bursts of up to 8 packets at a time to workers, using 15 bits of flow_id.
-The mode is selected by the type field in the ``rte_distributor_create()`` function.
+在报文分发器库中有两种API操作模式：一种是使用32bit的flow_id，一次向一个worker发送一个报文；另一种优化模式是一次性最多发送8个数据包给worker，使用15bit的flow_id。该模式由 ``rte_distributor_create()`` 函数中的类型字段指定。
 
-Distributor Core Operation
---------------------------
+分发逻辑核操作
+----------------
 
-The distributor core does the majority of the processing for ensuring that packets are fairly shared among workers.
-The operation of the distributor is as follows:
+分发逻辑核执行了大部分的处理以确保数据包在worker之间公平分发。分发逻辑核的运作情况如下：
 
-#.  Packets are passed to the distributor component by having the distributor lcore thread call the "rte_distributor_process()" API
+#.  分发逻辑核的lcore线程通过调用 ``rte_distributor_process()`` 来获取数据包。
 
-#.  The worker lcores all share a single cache line with the distributor core in order to pass messages and packets to and from the worker.
-    The process API call will poll all the worker cache lines to see what workers are requesting packets.
+#.  所有的worker lcore与distributor lcore共享一条缓存线行，以便在worker和distributor之间传递消息和数据包。执行API调用将轮询所有worker的缓存行，以查看哪些worker正在请求数据包。
 
-#.  As workers request packets, the distributor takes packets from the set of packets passed in and distributes them to the workers.
-    As it does so, it examines the "tag" -- stored in the RSS hash field in the mbuf -- for each packet
-    and records what tags are being processed by each  worker.
+#.  当有worker请求数据包时，distributor从第一步中传过来的一组数据包中取出数据包，并将其分发给worker。它检查每个数据包中存储在mbuf中RSS哈希字段中的“tag”，并记录每个worker正在处理的tag。
 
-#.  If the next packet in the input set has a tag which is already being processed by a worker,
-    then that packet will be queued up for processing by that worker
-    and given to it in preference to other packets when that work next makes a request for work.
-    This ensures that no two packets with the same tag are processed in parallel,
-    and that all packets with the same tag are processed in input order.
+#.  如果输入报文集中的下一个数据包有一个已经被worker处理的tag，则该数据包将排队等待worker的处理，并在下一个worker请求数据包时，优先考虑其他的数据包。这可以确保不会并发处理具有相同tag的两个报文，并且，具有相同tag的两个报文按输入顺序被处理。
 
-#.  Once all input packets passed to the process API have either been distributed to workers
-    or been queued up for a worker which is processing a given tag,
-    then the process API returns to the caller.
+#.  一旦传递给执行API的所有报文已经分发给worker，或者已经排队等待给定tag的worker处理，则执行API返回给调用者。
 
-Other functions which are available to the distributor lcore are:
+Distributor lcore可以使用的其他功能有：
 
 *   rte_distributor_returned_pkts()
 
@@ -80,23 +64,15 @@ Other functions which are available to the distributor lcore are:
 
 *   rte_distributor_clear_returns()
 
-Of these the most important API call is "rte_distributor_returned_pkts()"
-which should only be called on the lcore which also calls the process API.
-It returns to the caller all packets which have finished processing by all worker cores.
-Within this set of returned packets, all packets sharing the same tag will be returned in their original order.
+其中最重要的API调用是 ``rte_distributor_returned_pkts()`` ，它只能在调用进程API的lcore上调用。它将所有worker core完成处理的所有数据包返回给调用者。在这组返回的数据包中，共享相同标签的所有数据包将按原始顺序返回。
 
 **NOTE:**
-If worker lcores buffer up packets internally for transmission in bulk afterwards,
-the packets sharing a tag will likely get out of order.
-Once a worker lcore requests a new packet, the distributor assumes that it has completely finished with the previous packet and
-therefore that additional packets with the same tag can safely be distributed to other workers --
-who may then flush their buffered packets sooner and cause packets to get out of order.
+如果worker lcore在内部缓存数据包进行批量传输，则共享tag的数据包可能会出现故障。一旦一个worker lcore请求一个新的数据包，distributor就会假定它已经完成了先前的数据包，因此具有相同tag的附加数据包可以安全地分配给其他worker，然后他们可能会更早地刷新缓冲的数据包，使数据包发生故障。
 
 **NOTE:**
-No packet ordering guarantees are made about packets which do not share a common packet tag.
+对于不共享公共数据包tag的数据包，不提供数据包排序保证。
 
-Using the process and returned_pkts API, the following application workflow can be used,
-while allowing packet order within a packet flow -- identified by a tag -- to be maintained.
+使用上述执行过程及returned_pkts API，可以使用以下应用程序工作流，同时允许维护由tag识别的数据包流中的数据包顺序。
 
 
 .. figure:: img/packet_distributor2.*
@@ -104,18 +80,11 @@ while allowing packet order within a packet flow -- identified by a tag -- to be
    Application workflow
 
 
-The flush and clear_returns API calls, mentioned previously,
-are likely of less use that the process and returned_pkts APIS, and are principally provided to aid in unit testing of the library.
-Descriptions of these functions and their use can be found in the DPDK API Reference document.
+之前提到的flush和clear_returns API调用可能不太用于进程和returned_pkts APIS，并且主要用于帮助对库进行单元测试。可以在DPDK API参考文档中找到这些功能及其用途的描述。
 
 Worker Operation
 ----------------
 
-Worker cores are the cores which do the actual manipulation of the packets distributed by the packet distributor.
-Each worker calls "rte_distributor_get_pkt()" API to request a new packet when it has finished processing the previous one.
-[The previous packet should be returned to the distributor component by passing it as the final parameter to this API call.]
+Worker lcore是对distributor分发的数据包进行实际操作的lcore。 Worker调用rte_distributor_get_pkt() API在完成处理前一个数据包时请求一个新的数据包。前一个数据包应通过将其作为最终参数传递给该API调用而返回给分发器组件。
 
-Since it may be desirable to vary the number of worker cores, depending on the traffic load
-i.e. to save power at times of lighter load,
-it is possible to have a worker stop processing packets by calling "rte_distributor_return_pkt()" to indicate that
-it has finished the current packet and does not want a new one.
+有时候可能需要改变worker lcore的数量，这取决于业务负载，即在较轻的负载时节省功率，可以worker通过调用rte_distributor_return_pkt()接口停止处理报文，以指示在完成当前数据包处理后，不需要新的数据包。

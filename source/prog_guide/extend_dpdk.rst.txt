@@ -28,34 +28,35 @@
     (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
     OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-扩展 DPDK
-============
+Extending the DPDK
+=========================
 
-本章描述了开发者如何通过扩展DPDK来提供一个新的库、目标文件或者支持新的开发板。
+This chapter describes how a developer can extend the DPDK to provide a new library,
+a new target, or support a new target.
 
-示例：添加新的库 libfoo
---------------------------
+Example: Adding a New Library libfoo
+------------------------------------
 
-要添加新的库到DPDK，按照如下操作：
+To add a new library to the DPDK, proceed as follows:
 
-#.  添加新的配置选项：
+#.  Add a new configuration option:
 
-    .. code-block:: bash
+   .. code-block:: bash
 
         for f in config/\*; do \
             echo CONFIG_RTE_LIBFOO=y >> $f; done
 
-#.  创建新的源码目录：
+#.  Create a new directory with sources:
 
-    .. code-block:: console
+   .. code-block:: console
 
         mkdir ${RTE_SDK}/lib/libfoo
         touch ${RTE_SDK}/lib/libfoo/foo.c
         touch ${RTE_SDK}/lib/libfoo/foo.h
-        
-#.  源码添加 foo() 函数。
 
-    函数定义于 foo.c:
+#.  Add a foo() function in libfoo.
+
+    Definition is in foo.c:
 
     .. code-block:: c
 
@@ -63,13 +64,14 @@
         {
         }
 
-    函数声明于 foo.h:
+    Declaration is in foo.h:
 
     .. code-block:: c
 
         extern void foo(void);
 
-#.  更新文件 lib/Makefile:
+
+#.  Update lib/Makefile:
 
     .. code-block:: console
 
@@ -77,7 +79,7 @@
         # add:
         # DIRS-$(CONFIG_RTE_LIBFOO) += libfoo
 
-#.  为新的库创建新的 Makefile，如派生自 mempool Makefile，进行修改：
+#.  Create a new Makefile for this library, for example, derived from mempool Makefile:
 
     .. code-block:: console
 
@@ -88,11 +90,12 @@
         # librte_mempool -> libfoo
         # rte_mempool -> foo
 
-#.  更新文件 mk/DPDK.app.mk，添加 -lfoo 选项到 LDLIBS 变量中。
-    链接DPDK应用程序时会自动添加此标志。
-　　    　
 
-#.  添加此新库之后，重新构建DPDK (此处仅显示这个特殊的部分)：
+#.  Update mk/DPDK.app.mk, and add -lfoo in LDLIBS variable when the option is enabled.
+    This will automatically add this flag when linking a DPDK application.
+
+
+#.  Build the DPDK with the new library (we only show a specific target here):
 
     .. code-block:: console
 
@@ -100,28 +103,30 @@
         make config T=x86_64-native-linuxapp-gcc
         make
 
-#.  检测这个库被正确安装了：
+
+#.  Check that the library is installed:
 
     .. code-block:: console
 
         ls build/lib
         ls build/include
 
-示例：在测试用例中使用新库 libfoo 
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Example: Using libfoo in the Test Application
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-测试应用程序用于验证DPDK的所有功能。
-一旦添加了一个库，应该在测试用例程序中添加一个用例。
+The test application is used to validate all functionality of the DPDK.
+Once you have added a library, a new test case should be added in the test application.
 
-*   新的测试文件 test_foo.c 被添加，包含头文件 foo.h 并调用 foo() 函数。
-    当测试通过时，test_foo() 函数需要返回0。
+*   A new test_foo.c file should be added, that includes foo.h and calls the foo() function from test_foo().
+    When the test passes, the test_foo() function should return 0.
 
-*   为了处理新的测试用例，Makefile, test.h 和 commands.c 必须同时更新。
+*   Makefile, test.h and commands.c must be updated also, to handle the new test case.
 
-*   测试报告生成：autotest.py 是一个脚本，用于生成文件 ${RTE_SDK}/doc/rst/test_report/autotests 目录中指定的测试用例报告。
-    如果libfoo处于新的测试家族，链接 ${RTE_SDK}/doc/rst/test_report/test_report.rst 需要更新。
+*   Test report generation: autotest.py is a script that is used to generate the test report that is available in the
+    ${RTE_SDK}/doc/rst/test_report/autotests directory. This script must be updated also.
+    If libfoo is in a new test family, the links in ${RTE_SDK}/doc/rst/test_report/test_report.rst must be updated.
 
-*   重新构建DPDK库，添加新的测试应用程序：
+*   Build the DPDK with the updated test application (we only show a specific target here):
 
 
     .. code-block:: console

@@ -139,7 +139,6 @@
 
 :numref:`figure_prefetch_pipeline` :ref:`figure_prefetch_pipeline`
 
-:numref:`figure_pipe_prefetch_sm` :ref:`figure_pipe_prefetch_sm`
 
 :numref:`figure_blk_diag_dropper` :ref:`figure_blk_diag_dropper`
 

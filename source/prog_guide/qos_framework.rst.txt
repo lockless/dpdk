@@ -28,15 +28,15 @@
     (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
     OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-QoS框架
-=========
+Quality of Service (QoS) Framework
+==================================
 
-本章介绍了DPDK服务质量（QoS）框架。
+This chapter describes the DPDK Quality of Service (QoS) framework.
 
-支持QoS的数据包水线
---------------------
+Packet Pipeline with QoS Support
+--------------------------------
 
-具有QoS支持的复杂报文处理流水线的示例如下图所示。
+An example of a complex packet processing pipeline with QoS support is shown in the following figure.
 
 .. _figure_pkt_proc_pipeline_qos:
 
@@ -45,7 +45,9 @@ QoS框架
    Complex Packet Processing Pipeline with QoS Support
 
 
-这个水线使用可重复使用的DPDK软件库构建。在这个流程中实现QoS的主要模块有：策略器，缓存器和调度器。下表列出了各块的功能描述。
+This pipeline can be built using reusable DPDK software libraries.
+The main blocks implementing QoS in this pipeline are: the policer, the dropper and the scheduler.
+A functional description of each block is provided in the following table.
 
 .. _table_qos_1:
 
@@ -55,39 +57,47 @@ QoS框架
    | # | Block                  | Functional Description                                                         |
    |   |                        |                                                                                |
    +===+========================+================================================================================+
-   | 1 | Packet I/O RX & TX     | 多个NIC端口的报文接收/传输。用于Intel 1GbE/10GbE NIC的轮询模式驱动程序（PMD）。|
+   | 1 | Packet I/O RX & TX     | Packet reception/ transmission from/to multiple NIC ports. Poll mode drivers   |
+   |   |                        | (PMDs) for Intel 1 GbE/10 GbE NICs.                                            |
    |   |                        |                                                                                |
    +---+------------------------+--------------------------------------------------------------------------------+
-   | 2 | Packet parser          | 识别输入数据包的协议栈。检查数据包头部的完整性。                               |
+   | 2 | Packet parser          | Identify the protocol stack of the input packet. Check the integrity of the    |
+   |   |                        | packet headers.                                                                |
    |   |                        |                                                                                |
    +---+------------------------+--------------------------------------------------------------------------------+
-   | 3 | Flow classification    | 将输入数据包映射到已知流量上。                                                 |
-   |   |                        | 使用可配置散列函数（jhash，CRC等）和桶逻辑来处理冲突的精确匹配表查找。         |
+   | 3 | Flow classification    | Map the input packet to one of the known traffic flows. Exact match table      |
+   |   |                        | lookup using configurable hash function (jhash, CRC and so on) and bucket      |
+   |   |                        | logic to handle collisions.                                                    |
    |   |                        |                                                                                |
    +---+------------------------+--------------------------------------------------------------------------------+
-   | 4 | Policer                | 使用srTCM（RFC 2697）或trTCM（RFC2698）算法进行数据包测量。                    |
+   | 4 | Policer                | Packet metering using srTCM (RFC 2697) or trTCM (RFC2698) algorithms.          |
    |   |                        |                                                                                |
    +---+------------------------+--------------------------------------------------------------------------------+
-   | 5 | Load Balancer          | 将输入数据包分发给应用程序worker。为每个worker提供统一的负载。                 |
-   |   |                        | 保持流量对worker的亲和力和每个流程中的数据包顺序。                             |
+   | 5 | Load Balancer          | Distribute the input packets to the application workers. Provide uniform load  |
+   |   |                        | to each worker. Preserve the affinity of traffic flows to workers and the      |
+   |   |                        | packet order within each flow.                                                 |
    |   |                        |                                                                                |
    +---+------------------------+--------------------------------------------------------------------------------+
-   | 6 | Worker threads         | 客户指定的应用工作负载的占位符（例如IP堆栈等）。                               |
+   | 6 | Worker threads         | Placeholders for the customer specific application workload (for example, IP   |
+   |   |                        | stack and so on).                                                              |
    |   |                        |                                                                                |
    +---+------------------------+--------------------------------------------------------------------------------+
-   | 7 | Dropper                | 拥塞管理使用随机早期检测（RED）算法（Sally Floyd-Van Jacobson的论文）          |
-   |   |                        | 或加权RED（WRED）。根据当前调度程序队列的负载级别和报文优先级丢弃报文。        |
-   |   |                        | 当遇到拥塞时，首先丢弃优先级较低的数据包。                                     |
+   | 7 | Dropper                | Congestion management using the Random Early Detection (RED) algorithm         |
+   |   |                        | (specified by the Sally Floyd - Van Jacobson paper) or Weighted RED (WRED).    |
+   |   |                        | Drop packets based on the current scheduler queue load level and packet        |
+   |   |                        | priority. When congestion is experienced, lower priority packets are dropped   |
+   |   |                        | first.                                                                         |
    |   |                        |                                                                                |
    +---+------------------------+--------------------------------------------------------------------------------+
-   | 8 | Hierarchical Scheduler | 具有数千（通常为64K）叶节点（队列）的5级分层调度器                             |
-   |   |                        | （级别为：输出端口，子端口，管道，流量类和队列）。                             |
-   |   |                        | 实现流量整形（用于子站和管道级），严格优先级（对于流量级别）                   |
-   |   |                        | 和加权循环（WRR）（用于每个管道流量类中的队列）。                              |
+   | 8 | Hierarchical Scheduler | 5-level hierarchical scheduler (levels are: output port, subport, pipe,        |
+   |   |                        | traffic class and queue) with thousands (typically 64K) leaf nodes (queues).   |
+   |   |                        | Implements traffic shaping (for subport and pipe levels), strict priority      |
+   |   |                        | (for traffic class level) and Weighted Round Robin (WRR) (for queues within    |
+   |   |                        | each pipe traffic class).                                                      |
    |   |                        |                                                                                |
    +---+------------------------+--------------------------------------------------------------------------------+
 
-整个数据包处理流程中使用的基础架构块如下表所示。
+The infrastructure blocks used throughout the packet processing pipeline are listed in the following table.
 
 .. _table_qos_2:
 
@@ -97,27 +107,36 @@ QoS框架
    | # | Block                 | Functional Description                                                |
    |   |                       |                                                                       |
    +===+=======================+=======================================================================+
-   | 1 | Buffer manager        | 支持全局缓冲池和专用的每线程缓存缓存。                                |
+   | 1 | Buffer manager        | Support for global buffer pools and private per-thread buffer caches. |
    |   |                       |                                                                       |
    +---+-----------------------+-----------------------------------------------------------------------+
-   | 2 | Queue manager         | 支持水线之间的消息传递。                                              |
+   | 2 | Queue manager         | Support for message passing between pipeline blocks.                  |
    |   |                       |                                                                       |
    +---+-----------------------+-----------------------------------------------------------------------+
-   | 3 | Power saving          | 在低活动期间支持节能。                                                |
+   | 3 | Power saving          | Support for power saving during low activity periods.                 |
    |   |                       |                                                                       |
    +---+-----------------------+-----------------------------------------------------------------------+
 
-水线块到CPU cores的映射可以根据每个特定应用程序所需的性能级别和为每个块启用的功能集进行配置。一些块可能会消耗多个CPU cores（每个CPU core在不同的输入数据包上运行同一个块的不同实例），而另外的几个块可以映射到同一个CPU core。
+The mapping of pipeline blocks to CPU cores is configurable based on the performance level required by each specific application
+and the set of features enabled for each block.
+Some blocks might consume more than one CPU core (with each CPU core running a different instance of the same block on different input packets),
+while several other blocks could be mapped to the same CPU core.
 
-分层调度
------------
+Hierarchical Scheduler
+----------------------
 
-分层调度块（当存在时）通常位于发送阶段之前的TX侧。其目的是根据每个网络节点的服务级别协议（SLA）指定的策略来实现不同用户和不同流量类别的数据包传输。
+The hierarchical scheduler block, when present, usually sits on the TX side just before the transmission stage.
+Its purpose is to prioritize the transmission of packets from different users and different traffic classes
+according to the policy specified by the Service Level Agreements (SLAs) of each network node.
 
-概述
-~~~~~~
+Overview
+~~~~~~~~
 
-分层调度类似于网络处理器使用的流量管理，通常实现每个流（或每组流）分组排队和调度。它像缓冲区一样工作，能够在传输之前临时存储大量数据包（入队操作）；由于NIC TX正在请求更多的数据包进行传输，所以这些数据包随后被移出，并且随着分组选择逻辑观察预定义的SLA（出队操作）而交给NIC TX。
+The hierarchical scheduler block is similar to the traffic manager block used by network processors
+that typically implement per flow (or per group of flows) packet queuing and scheduling.
+It typically acts like a buffer that is able to temporarily store a large number of packets just before their transmission (enqueue operation);
+as the NIC TX is requesting more packets for transmission,
+these packets are later on removed and handed over to the NIC TX with the packet selection logic observing the predefined SLAs (dequeue operation).
 
 .. _figure_hier_sched_blk:
 
@@ -126,15 +145,21 @@ QoS框架
    Hierarchical Scheduler Block Internal Diagram
 
 
-分层调度针对大量报文队列进行了优化。当只需要少量的队列时，应该使用消息传递队列而不是这个模块。有关更多详细的讨论，请参阅“Worst Case Scenarios for Performance”。
+The hierarchical scheduler is optimized for a large number of packet queues.
+When only a small number of queues are needed, message passing queues should be used instead of this block.
+See `Worst Case Scenarios for Performance`_ for a more detailed discussion.
 
-调度层次
-~~~~~~~~~~
+Scheduling Hierarchy
+~~~~~~~~~~~~~~~~~~~~
 
-调度层次结构如下图所示。 :numref:`figure_sched_hier_per_port`.
-层次结构的第一级是以太网TX端口1/10/40 GbE，后续层次级别定义为子端口，管道，流量类和队列。
+The scheduling hierarchy is shown in :numref:`figure_sched_hier_per_port`.
+The first level of the hierarchy is the Ethernet TX port 1/10/40 GbE,
+with subsequent hierarchy levels defined as subport, pipe, traffic class and queue.
 
-通常，每个子端口表示预定义的用户组，而每个管道表示单个用户/订户。每个流量类是具有特定丢失率，延迟和抖动要求（例如语音，视频或数据传输）的不同流量类型的表示。每个队列都承载属于同一用户的同一类型的一个或多个连接的数据包。
+Typically, each subport represents a predefined group of users, while each pipe represents an individual user/subscriber.
+Each traffic class is the representation of a different traffic type with specific loss rate,
+delay and jitter requirements, such as voice, video or data transfers.
+Each queue hosts packets from one or multiple connections of the same type belonging to the same user.
 
 .. _figure_sched_hier_per_port:
 
@@ -143,7 +168,7 @@ QoS框架
    Scheduling Hierarchy per Port
 
 
-下表列出了各层次的功能。
+The functionality of each hierarchical level is detailed in the following table.
 
 .. _table_qos_3:
 
@@ -153,63 +178,71 @@ QoS框架
    | # | Level              | Siblings per Parent        | Functional Description                                        |
    |   |                    |                            |                                                               |
    +===+====================+============================+===============================================================+
-   | 1 | Port               | -                          | #.  输出以太网端口1/10/40 GbE                                 |
+   | 1 | Port               | -                          | #.  Output Ethernet port 1/10/40 GbE.                         |
    |   |                    |                            |                                                               |
-   |   |                    |                            | #.  .多个端口以轮询方式调度，所有端口具有相同的优先级         |
-   |   |                    |                            |                                                               |
-   +---+--------------------+----------------------------+---------------------------------------------------------------+
-   | 2 | Subport            | Configurable (default: 8)  | #.  流量整形使用令牌桶算法（每个子口一个令牌桶）              |
-   |   |                    |                            |                                                               |
-   |   |                    |                            | #.  Subport层对每个流量类（TC）强制执行上限。                 |
-   |   |                    |                            |                                                               |
-   |   |                    |                            | #.  较低优先级的TC能够重用较高优先级的TC当前未使用的子端口带宽|
+   |   |                    |                            | #.  Multiple ports are scheduled in round robin order with    |
+   |   |                    |                            |     all ports having equal priority.                          |
    |   |                    |                            |                                                               |
    +---+--------------------+----------------------------+---------------------------------------------------------------+
-   | 3 | Pipe               | Configurable (default: 4K) | #.  使用令牌桶算法进行流量整形（每个pipe一个令牌桶）          |
+   | 2 | Subport            | Configurable (default: 8)  | #.  Traffic shaping using token bucket algorithm (one token   |
+   |   |                    |                            |     bucket per subport).                                      |
+   |   |                    |                            |                                                               |
+   |   |                    |                            | #.  Upper limit enforced per Traffic Class (TC) at the        |
+   |   |                    |                            |     subport level.                                            |
+   |   |                    |                            |                                                               |
+   |   |                    |                            | #.  Lower priority TCs able to reuse subport bandwidth        |
+   |   |                    |                            |     currently unused by higher priority TCs.                  |
    |   |                    |                            |                                                               |
    +---+--------------------+----------------------------+---------------------------------------------------------------+
-   | 4 | Traffic Class (TC) | 4                          | #.  相同pipe的TC以严格的优先级顺序处理。                      |
-   |   |                    |                            |                                                               |
-   |   |                    |                            | #.  在pipe级别每TC执行上限                                    |
-   |   |                    |                            |                                                               |
-   |   |                    |                            | #.  较低优先级的TC能够重用当前未被较高优先级的TC使用的pipe带宽|
-   |   |                    |                            |                                                               |
-   |   |                    |                            | #.  当子卡TC超额（配置时间事件）时，                          |
-   |   |                    |                            |     管道TC上限被限制为由所有子端口管道共享的动态调整值。      |
+   | 3 | Pipe               | Configurable (default: 4K) | #.  Traffic shaping using the token bucket algorithm (one     |
+   |   |                    |                            |     token bucket per pipe.                                    |
    |   |                    |                            |                                                               |
    +---+--------------------+----------------------------+---------------------------------------------------------------+
-   | 5 | Queue              | 4                          | #.  根据预定权重，使用加权循环（WRR）对相同TC的队列进行服务。 |
+   | 4 | Traffic Class (TC) | 4                          | #.  TCs of the same pipe handled in strict priority order.    |
+   |   |                    |                            |                                                               |
+   |   |                    |                            | #.  Upper limit enforced per TC at the pipe level.            |
+   |   |                    |                            |                                                               |
+   |   |                    |                            | #.  Lower priority TCs able to reuse pipe bandwidth currently |
+   |   |                    |                            |     unused by higher priority TCs.                            |
+   |   |                    |                            |                                                               |
+   |   |                    |                            | #.  When subport TC is oversubscribed (configuration time     |
+   |   |                    |                            |     event), pipe TC upper limit is capped to a dynamically    |
+   |   |                    |                            |     adjusted value that is shared by all the subport pipes.   |
+   |   |                    |                            |                                                               |
+   +---+--------------------+----------------------------+---------------------------------------------------------------+
+   | 5 | Queue              | 4                          | #.  Queues of the same TC are serviced using Weighted Round   |
+   |   |                    |                            |     Robin (WRR) according to predefined weights.              |
    |   |                    |                            |                                                               |
    +---+--------------------+----------------------------+---------------------------------------------------------------+
 
-编程接口
-~~~~~~~~~~~
+Application Programming Interface (API)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-PORT调度配置API
-^^^^^^^^^^^^^^^^^^
+Port Scheduler Configuration API
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-rte_sched.h文件包含port，subport和pipe的配置功能。
+The rte_sched.h file contains configuration functions for port, subport and pipe.
 
-PORT调度入队API
-^^^^^^^^^^^^^^^^^
+Port Scheduler Enqueue API
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Port调度入队API非常类似于DPDK PMD TX功能的API。
+The port scheduler enqueue API is very similar to the API of the DPDK PMD TX function.
 
 .. code-block:: c
 
     int rte_sched_port_enqueue(struct rte_sched_port *port, struct rte_mbuf **pkts, uint32_t n_pkts);
 
-PORT调度出队API
-^^^^^^^^^^^^^^^^
+Port Scheduler Dequeue API
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Port调度入队API非常类似于DPDK PMD RX功能的API。
+The port scheduler dequeue API is very similar to the API of the DPDK PMD RX function.
 
 .. code-block:: c
 
     int rte_sched_port_dequeue(struct rte_sched_port *port, struct rte_mbuf **pkts, uint32_t n_pkts);
 
-用例
-^^^^^^
+Usage Example
+^^^^^^^^^^^^^
 
 .. code-block:: c
 
@@ -249,13 +282,13 @@ Port调度入队API非常类似于DPDK PMD RX功能的API。
         rte_eth_tx_burst(NIC_TX_PORT, NIC_TX_QUEUE, pkts_tx, n_pkts_tx);
     }
 
-实现
-~~~~~~
+Implementation
+~~~~~~~~~~~~~~
 
 Internal Data Structures per Port
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-内部数据结构示意图，详细内容如下。
+A schematic of the internal data structures in shown in with details in.
 
 .. _figure_data_struct_per_port:
 
@@ -275,99 +308,130 @@ Internal Data Structures per Port
    |   |                      |                         |                     | Enq         | Deq            |                                                   |
    |   |                      |                         |                     |             |                |                                                   |
    +===+======================+=========================+=====================+=============+================+===================================================+
-   | 1 | Subport table entry  | 64                      | # subports per port | -           | Rd, Wr         | 持续的子接口数据（信用，等）                      |
+   | 1 | Subport table entry  | 64                      | # subports per port | -           | Rd, Wr         | Persistent subport data (credits, etc).           |
    |   |                      |                         |                     |             |                |                                                   |
    +---+----------------------+-------------------------+---------------------+-------------+----------------+---------------------------------------------------+
-   | 2 | Pipe table entry     | 64                      | # pipes per port    | -           | Rd, Wr         | 在运行时更新的pip，其TC及其队列的数据（信用等）   |
+   | 2 | Pipe table entry     | 64                      | # pipes per port    | -           | Rd, Wr         | Persistent data for pipe, its TCs and its queues  |
+   |   |                      |                         |                     |             |                | (credits, etc) that is updated during run-time.   |
    |   |                      |                         |                     |             |                |                                                   |
-   |   |                      |                         |                     |             |                | pipe配置参数在运行时不改变。                      |
-   |   |                      |                         |                     |             |                | 相同的pipe配置参数由多个pipe共享，                |
-   |   |                      |                         |                     |             |                | 因此它们不是pipe表条目的一部分。                  |
-   |   |                      |                         |                     |             |                |                                                   |
-   +---+----------------------+-------------------------+---------------------+-------------+----------------+---------------------------------------------------+
-   | 3 | Queue table entry    | 4                       | #queues per port    | Rd, Wr      | Rd, Wr         | 持续的队列数据（读写指针）。                      |
-   |   |                      |                         |                     |             |                | 对于所有队列，每个TC的队列大小相同，              |
-   |   |                      |                         |                     |             |                | 允许使用快速公式计算队列基地址，                  |
-   |   |                      |                         |                     |             |                | 因此这两个参数不是队列表条目的一部分。            |
-   |   |                      |                         |                     |             |                |                                                   |
-   |   |                      |                         |                     |             |                | 任何给定pipe的队列表条目都存储在同一个高速缓存行中|
+   |   |                      |                         |                     |             |                | The pipe configuration parameters do not change   |
+   |   |                      |                         |                     |             |                | during run-time. The same pipe configuration      |
+   |   |                      |                         |                     |             |                | parameters are shared by multiple pipes,          |
+   |   |                      |                         |                     |             |                | therefore they are not part of pipe table entry.  |
    |   |                      |                         |                     |             |                |                                                   |
    +---+----------------------+-------------------------+---------------------+-------------+----------------+---------------------------------------------------+
-   | 4 | Queue storage area   | Config (default: 64 x8) | # queues per port   | Wr          | Rd             | 每个队列的元素数组; 每个元素的大小是8字节mbuf指针 |
+   | 3 | Queue table entry    | 4                       | #queues per port    | Rd, Wr      | Rd, Wr         | Persistent queue data (read and write pointers).  |
+   |   |                      |                         |                     |             |                | The queue size is the same per TC for all queues, |
+   |   |                      |                         |                     |             |                | allowing the queue base address to be computed    |
+   |   |                      |                         |                     |             |                | using a fast formula, so these two parameters are |
+   |   |                      |                         |                     |             |                | not part of queue table entry.                    |
+   |   |                      |                         |                     |             |                |                                                   |
+   |   |                      |                         |                     |             |                | The queue table entries for any given pipe are    |
+   |   |                      |                         |                     |             |                | stored in the same cache line.                    |
    |   |                      |                         |                     |             |                |                                                   |
    +---+----------------------+-------------------------+---------------------+-------------+----------------+---------------------------------------------------+
-   | 5 | Active queues bitmap | 1 bit per queue         | 1                   | Wr (Set)    | Rd, Wr (Clear) | 位图为每个队列维护一个状态位：                    |
-   |   |                      |                         |                     |             |                | 队列不活动（队列为空）或队列活动（队列不为空）    |
-   |   |                      |                         |                     |             |                |                                                   |
-   |   |                      |                         |                     |             |                | 队列位由调度程序入队设置，队列变空时清除。        |
-   |   |                      |                         |                     |             |                |                                                   |
-   |   |                      |                         |                     |             |                | 位图扫描操作返回下一个非空pipe及其状态            |
-   |   |                      |                         |                     |             |                | （pipe中活动队列的16位掩码）。                    |
+   | 4 | Queue storage area   | Config (default: 64 x8) | # queues per port   | Wr          | Rd             | Array of elements per queue; each element is 8    |
+   |   |                      |                         |                     |             |                | byte in size (mbuf pointer).                      |
    |   |                      |                         |                     |             |                |                                                   |
    +---+----------------------+-------------------------+---------------------+-------------+----------------+---------------------------------------------------+
-   | 6 | Grinder              | ~128                    | Config (default: 8) | -           | Rd, Wr         | 目前正在处理的活动pipe列表。                      |
-   |   |                      |                         |                     |             |                | grinder在pipe加工过程中包含临时数据。             |
+   | 5 | Active queues bitmap | 1 bit per queue         | 1                   | Wr (Set)    | Rd, Wr (Clear) | The bitmap maintains one status bit per queue:    |
+   |   |                      |                         |                     |             |                | queue not active (queue is empty) or queue active |
+   |   |                      |                         |                     |             |                | (queue is not empty).                             |
    |   |                      |                         |                     |             |                |                                                   |
-   |   |                      |                         |                     |             |                | 一旦当前pipe排出数据包或信用点，                  |
-   |   |                      |                         |                     |             |                | 它将从位图中的另一个活动管道替换。                |
+   |   |                      |                         |                     |             |                | Queue bit is set by the scheduler enqueue and     |
+   |   |                      |                         |                     |             |                | cleared by the scheduler dequeue when queue       |
+   |   |                      |                         |                     |             |                | becomes empty.                                    |
+   |   |                      |                         |                     |             |                |                                                   |
+   |   |                      |                         |                     |             |                | Bitmap scan operation returns the next non-empty  |
+   |   |                      |                         |                     |             |                | pipe and its status (16-bit mask of active queue  |
+   |   |                      |                         |                     |             |                | in the pipe).                                     |
+   |   |                      |                         |                     |             |                |                                                   |
+   +---+----------------------+-------------------------+---------------------+-------------+----------------+---------------------------------------------------+
+   | 6 | Grinder              | ~128                    | Config (default: 8) | -           | Rd, Wr         | Short list of active pipes currently under        |
+   |   |                      |                         |                     |             |                | processing. The grinder contains temporary data   |
+   |   |                      |                         |                     |             |                | during pipe processing.                           |
+   |   |                      |                         |                     |             |                |                                                   |
+   |   |                      |                         |                     |             |                | Once the current pipe exhausts packets or         |
+   |   |                      |                         |                     |             |                | credits, it is replaced with another active pipe  |
+   |   |                      |                         |                     |             |                | from the bitmap.                                  |
    |   |                      |                         |                     |             |                |                                                   |
    +---+----------------------+-------------------------+---------------------+-------------+----------------+---------------------------------------------------+
 
-多核缩放策略
-^^^^^^^^^^^^^^
+Multicore Scaling Strategy
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-多核缩放策略如下：
+The multicore scaling strategy is:
 
-#.  在不同线程上操作不同的物理端口。但是同一个端口的入队和出队由同一个线程执行。
+#.  Running different physical ports on different threads. The enqueue and dequeue of the same port are run by the same thread.
 
-#.  通过在不同线程上操作相同物理端口（虚拟端口）的不同组的子端口，可以将相同的物理端口拆分到不同的线程。类似地，子端口可以被分割成更多个子端口，每个子端口由不同的线程运行。但是同一个端口的入队和出队由同一个线程运行。仅当出于性能考虑，不可能使用单个core处理完整端口时，才这样处理。
+#.  Splitting the same physical port to different threads by running different sets of subports of the same physical port (virtual ports) on different threads.
+    Similarly, a subport can be split into multiple subports that are each run by a different thread.
+    The enqueue and dequeue of the same port are run by the same thread.
+    This is only required if, for performance reasons, it is not possible to handle a full port with a single core.
 
-同一输出端口的出队和入队
-"""""""""""""""""""""""""""
+Enqueue and Dequeue for the Same Output Port
+""""""""""""""""""""""""""""""""""""""""""""
 
-上面强调过，同一个端口的出队和入队需要由同一个线程执行。因为，在不同core上对同一个输出端口执行出队和入队操作，可能会对调度程序的性能造成重大影响，因此不推荐这样做。
+Running enqueue and dequeue operations for the same output port from different cores is likely to cause significant impact on scheduler's performance
+and it is therefore not recommended.
 
-同一端口的入队和出队操作共享以下数据结构的访问权限：
+The port enqueue and dequeue operations share access to the following data structures:
 
-#.  报文描述符
+#.  Packet descriptors
 
-#.  队列表
+#.  Queue table
 
-#.  队列存储空区
+#.  Queue storage area
 
-#.  活动队列位图
+#.  Bitmap of active queues
 
-可能存在使性能下降的原因如下：
+The expected drop in performance is due to:
 
-#.  需要使队列和位图操作线程安全，这可能需要使用锁以保证访问顺序（例如，自旋锁/信号量）或使用原子操作进行无锁访问（例如，Test and Set或Compare and Swap命令等））。前一种情况对性能影响要严重得多。
+#.  Need to make the queue and bitmap operations thread safe,
+    which requires either using locking primitives for access serialization (for example, spinlocks/ semaphores) or
+    using atomic primitives for lockless access (for example, Test and Set, Compare And Swap, an so on).
+    The impact is much higher in the former case.
 
-#.  在两个core之间对存储共享数据结构的缓存行执行乒乓操作（由MESI协议缓存一致性CPU硬件透明地完成）。
+#.  Ping-pong of cache lines storing the shared data structures between the cache hierarchies of the two cores
+    (done transparently by the MESI protocol cache coherency CPU hardware).
 
-当调度程序入队和出队操作必须在同一个线程运行，允许队列和位图操作非线程安全，并将调度程序数据结构保持在同一个core上，可以很大程度上保证性能。
+Therefore, the scheduler enqueue and dequeue operations have to be run from the same thread,
+which allows the queues and the bitmap operations to be non-thread safe and
+keeps the scheduler data structures internal to the same core.
 
-性能缩放
-""""""""""
+Performance Scaling
+"""""""""""""""""""
 
-扩展NIC端口数量只需要保证用于流量调度的CPU内核数量按比例增加即可。
+Scaling up the number of NIC ports simply requires a proportional increase in the number of CPU cores to be used for traffic scheduling.
 
-入队水线
-^^^^^^^^^^
+Enqueue Pipeline
+^^^^^^^^^^^^^^^^
 
-每个数据包的入队步骤：
+The sequence of steps per packet:
 
-#.  访问mbuf以读取标识数据包的目标队列所需的字段。这些字段包括port，subport，traffic class及queue，并且通常由报文分类阶段设置。
+#.  *Access* the mbuf to read the data fields required to identify the destination queue for the packet.
+    These fields are: port, subport, traffic class and queue within traffic class, and are typically set by the classification stage.
 
-#.  访问队列结构以识别队列数组中的写入位置。如果队列已满，则丢弃该数据包。
+#.  *Access* the queue structure to identify the write location in the queue array.
+    If the queue is full, then the packet is discarded.
 
-#.  访问队列阵列位置以存储数据包（即写入mbuf指针）。
+#.  *Access* the queue array location to store the packet (i.e. write the mbuf pointer).
 
-应该注意到这些步骤之间具有很强的数据依赖性，因为步骤2和3在步骤1和2的结果变得可用之前无法启动，这样就无法使用处理器乱序执行引擎上提供任何显着的性能优化。
+It should be noted the strong data dependency between these steps, as steps 2 and 3 cannot start before the result from steps 1 and 2 becomes available,
+which prevents the processor out of order execution engine to provide any significant performance optimizations.
 
-考虑这样一种情况，给定的输入报文速率很高，队列数量大，可以想象得到，入队当前数据包需要访问的数据结构不存在于当前core的L1或L2 data cache中，此时，上述3个内存访问操作将会产生L1和L2 data cache miss。就性能考虑而言，每个数据包出现3次L1 / L2 data cache miss是不可接受的。
+Given the high rate of input packets and the large amount of queues,
+it is expected that the data structures accessed to enqueue the current packet are not present
+in the L1 or L2 data cache of the current core, thus the above 3 memory accesses would result (on average) in L1 and L2 data cache misses.
+A number of 3 L1/L2 cache misses per packet is not acceptable for performance reasons.
 
-解决方法是提前预取所需的数据结构。预取操作具有执行延迟，在此期间处理器不应尝试访问当前正在进行预取的数据结构，此时处理器转向执行其他工作。可用的其他工作可以是对其他输入报文执行不同阶段的入队序列，从而实现入队操作的流水线实现。
+The workaround is to prefetch the required data structures in advance. The prefetch operation has an execution latency during which
+the processor should not attempt to access the data structure currently under prefetch, so the processor should execute other work.
+The only other work available is to execute different stages of the enqueue sequence of operations on other input packets,
+thus resulting in a pipelined implementation for the enqueue operation.
 
-:numref:`figure_prefetch_pipeline` 展示出了具有4级水线的入队操作实现，并且每个阶段操作2个不同的输入报文。在给定的时间点上，任何报文只能在水线某个阶段进行处理。
+:numref:`figure_prefetch_pipeline` illustrates a pipelined implementation for the enqueue operation with 4 pipeline stages and each stage executing 2 different input packets.
+No input packet can be part of more than one pipeline stage at a given time.
 
 .. _figure_prefetch_pipeline:
 
@@ -376,24 +440,39 @@ Internal Data Structures per Port
     Prefetch Pipeline for the Hierarchical Scheduler Enqueue Operation
 
 
-由上图描述的入队水线实现的拥塞管理方案是非常基础的：数据包排队入队，直到指定队列变满为止；当满时，到这个队列的所有数据包将被丢弃，直到队列中有数据包出队。可以通过使用RED/WRED作为入队水线的一部分来改进，该流程查看队列占用率和报文优先级，以便产生特定数据包的入队/丢弃决定（与入队所有数据包/不加区分地丢弃所有数据包不一样）。
+The congestion management scheme implemented by the enqueue pipeline described above is very basic:
+packets are enqueued until a specific queue becomes full,
+then all the packets destined to the same queue are dropped until packets are consumed (by the dequeue operation).
+This can be improved by enabling RED/WRED as part of the enqueue pipeline which looks at the queue occupancy and
+packet priority in order to yield the enqueue/drop decision for a specific packet
+(as opposed to enqueuing all packets / dropping all packets indiscriminately).
 
-出队状态机
-^^^^^^^^^^^^
+Dequeue State Machine
+^^^^^^^^^^^^^^^^^^^^^
 
-从当前pipe调度下一个数据包的步骤如下：
+The sequence of steps to schedule the next packet from the current pipe is:
 
-#.  使用位图扫描操作识别出下一个活动的pipe（prefetch pipe）。
+#.  Identify the next active pipe using the bitmap scan operation, *prefetch* pipe.
 
-#.  读取pipe数据结构。更新当前pipe及其subport的信用。识别当前pipe中的第一个active traffic class，使用WRR选择下一个queue，为当前pipe的所有16个queue预取队列指针。
+#.  *Read* pipe data structure. Update the credits for the current pipe and its subport.
+    Identify the first active traffic class within the current pipe, select the next queue using WRR,
+    *prefetch* queue pointers for all the 16 queues of the current pipe.
 
-#.  从当前WRR queue读取下一个元素，并预取其数据包描述符。
+#.  *Read* next element from the current WRR queue and *prefetch* its packet descriptor.
 
-#.  从包描述符（mbuf结构）读取包长度。根据包长度和可用信用（当前pipe，pipe traffic class，subport及subport traffic class），对当前数据包进行是否调度决策。
+#.  *Read* the packet length from the packet descriptor (mbuf structure).
+    Based on the packet length and the available credits (of current pipe, pipe traffic class, subport and subport traffic class),
+    take the go/no go scheduling decision for the current packet.
 
-为了避免cache miss，上述数据结构（pipe，queue，queue array，mbufs）在被访问之前被预取。隐藏预取操作的延迟的策略是在为当前pipe发出预取后立即从当前pipe（在grinder A中）切换到另一个pipe（在grinderB中）。这样就可以在执行切换回pipe（grinder A）之前，有足够的时间完成预取操作。
+To avoid the cache misses, the above data structures (pipe, queue, queue array, mbufs) are prefetched in advance of being accessed.
+The strategy of hiding the latency of the prefetch operations is to switch from the current pipe (in grinder A) to another pipe
+(in grinder B) immediately after a prefetch is issued for the current pipe.
+This gives enough time to the prefetch operation to complete before the execution switches back to this pipe (in grinder A).
 
-出pipe状态机将数据存在处理器高速缓存中，因此它尝试从相同的pipe TC和pipe（尽可能多的数据包和信用）发送尽可能多的数据包，然后再移动到下一个活动TC pipe（如果有）或另一个活动pipe。
+The dequeue pipe state machine exploits the data presence into the processor cache,
+therefore it tries to send as many packets from the same pipe TC and pipe as possible (up to the available packets and credits) before
+moving to the next active TC from the same pipe (if any) or to another active pipe.
+
 .. _figure_pipe_prefetch_sm:
 
 .. figure:: img/pipe_prefetch_sm.*
@@ -402,70 +481,102 @@ Internal Data Structures per Port
    Operation
 
 
-时间和同步
+Timing and Synchronization
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The output port is modeled as a conveyor belt of byte slots that need to be filled by the scheduler with data for transmission.
+For 10 GbE, there are 1.25 billion byte slots that need to be filled by the port scheduler every second.
+If the scheduler is not fast enough to fill the slots, provided that enough packets and credits exist,
+then some slots will be left unused and bandwidth will be wasted.
+
+In principle, the hierarchical scheduler dequeue operation should be triggered by NIC TX.
+Usually, once the occupancy of the NIC TX input queue drops below a predefined threshold,
+the port scheduler is woken up (interrupt based or polling based,
+by continuously monitoring the queue occupancy) to push more packets into the queue.
+
+Internal Time Reference
+"""""""""""""""""""""""
+
+The scheduler needs to keep track of time advancement for the credit logic,
+which requires credit updates based on time (for example, subport and pipe traffic shaping, traffic class upper limit enforcement, and so on).
+
+Every time the scheduler decides to send a packet out to the NIC TX for transmission, the scheduler will increment its internal time reference accordingly.
+Therefore, it is convenient to keep the internal time reference in units of bytes,
+where a byte signifies the time duration required by the physical interface to send out a byte on the transmission medium.
+This way, as a packet is scheduled for transmission, the time is incremented with (n + h),
+where n is the packet length in bytes and h is the number of framing overhead bytes per packet.
+
+Internal Time Reference Re-synchronization
+""""""""""""""""""""""""""""""""""""""""""
+
+The scheduler needs to align its internal time reference to the pace of the port conveyor belt.
+The reason is to make sure that the scheduler does not feed the NIC TX with more bytes than the line rate of the physical medium in order to prevent packet drop
+(by the scheduler, due to the NIC TX input queue being full, or later on, internally by the NIC TX).
+
+The scheduler reads the current time on every dequeue invocation.
+The CPU time stamp can be obtained by reading either the Time Stamp Counter (TSC) register or the High Precision Event Timer (HPET) register.
+The current CPU time stamp is converted from number of CPU clocks to number of bytes:
+*time_bytes = time_cycles / cycles_per_byte, where cycles_per_byte*
+is the amount of CPU cycles that is equivalent to the transmission time for one byte on the wire
+(e.g. for a CPU frequency of 2 GHz and a 10GbE port,*cycles_per_byte = 1.6*).
+
+The scheduler maintains an internal time reference of the NIC time.
+Whenever a packet is scheduled, the NIC time is incremented with the packet length (including framing overhead).
+On every dequeue invocation, the scheduler checks its internal reference of the NIC time against the current time:
+
+#. If NIC time is in the future (NIC time >= current time), no adjustment of NIC time is needed.
+   This means that scheduler is able to schedule NIC packets before the NIC actually needs those packets, so the NIC TX is well supplied with packets;
+
+#. If NIC time is in the past (NIC time < current time), then NIC time should be adjusted by setting it to the current time.
+   This means that the scheduler is not able to keep up with the speed of the NIC byte conveyor belt,
+   so NIC bandwidth is wasted due to poor packet supply to the NIC TX.
+
+Scheduler Accuracy and Granularity
+""""""""""""""""""""""""""""""""""
+
+The scheduler round trip delay (SRTD) is the time (number of CPU cycles) between two consecutive examinations of the same pipe by the scheduler.
+
+To keep up with the output port (that is, avoid bandwidth loss),
+the scheduler should be able to schedule n packets faster than the same n packets are transmitted by NIC TX.
+
+The scheduler needs to keep up with the rate of each individual pipe,
+as configured for the pipe token bucket, assuming that no port oversubscription is taking place.
+This means that the size of the pipe token bucket should be set high enough to prevent it from overflowing due to big SRTD,
+as this would result in credit loss (and therefore bandwidth loss) for the pipe.
+
+Credit Logic
 ^^^^^^^^^^^^
 
-输出端口被建模为字节槽的传送带，需要由调度器填充用于传输的数据。对于10GbE，每秒需要由调度器填充12.5亿个字节的槽位。如果调度程序填充不够快，只要存在足够的报文和信用，则一些时隙将被闲置并且带宽将被浪费。
-
-原则上，层次调度程序出队操作应由NIC TX触发。通常，一旦NIC TX输入队列的占用率下降到预定义的阈值以下，端口调度器将被唤醒（基于中断或基于轮询，通过连续监视队列占用）来填充更多的数据包进入队列。
-
-内部时间引用
-"""""""""""""
-
-调度器需要跟踪信用逻辑的时间演化，因为信用需要基于时间更新（例如，子流量和管道流量整形，流量级上限执行等）。
-
-每当调度程序决定将数据包发送到NIC TX进行传输时，调度器将相应地增加其内部时间参考。因此，以字节为单位保持内部时间基准是方便的，其中字节表示物理接口在传输介质上发送字节所需的持续时间。这样，当报文被调度用于传输时，时间以（n + h）递增，其中n是以字节为单位的报文长度，h是每个报文的成帧开销字节数。
-
-内部时间参考重新同步
-""""""""""""""""""""""
-
-调度器需要将其内部时间参考对齐到端口传送带的步速。原因是要确保调度程序不以比物理介质的线路速率更多的字节来馈送NIC TX，以防止数据包丢失。
-
-调度程序读取每个出队调用的当前时间。可以通过读取时间戳计数器（TSC）寄存器或高精度事件定时器（HPET）寄存器来获取CPU时间戳。 当前CPU时间戳将CPU时钟数转换为字节数：time_bytes = time_cycles / cycles_per_byte，其中cycles_per_byte是等效于线上一个字节的传输时间的CPU周期数（例如CPU频率 2 GHz和10GbE端口， cycles_per_byte = 1.6 ）。
-
-调度程序维护NIC time的内部时间参考。 每当分组被调度时，NIC time随分组长度（包括帧开销）增加。在每次出队调用时，调度程序将检查其NIC time的内部引用与当前时间的关系：
-
-#. 如果NIC time未来（NIC time> =当前时间），则不需要调整NIC time。这意味着调度程序能够在NIC实际需要这些数据包之前安排NIC数据包，因此NIC TX提供了数据包;
-
-#. 如果NIC time过去（NIC时间<当前时间），则NIC time应通过将其设置为当前时间来进行调整。 这意味着调度程序不能跟上NIC字节传送带的速度，因此由于NIC TX的数据包供应不足，所以NIC带宽被浪费了。
-
-调度器精度和粒度
+Scheduling Decision
 """""""""""""""""""
 
-调度器往返延迟（SRTD）是指调度器在同一个pipe的两次连续检验之间的时间（CPU周期数）。
+The scheduling decision to send next packet from (subport S, pipe P, traffic class TC, queue Q) is favorable (packet is sent)
+when all the conditions below are met:
 
-为了跟上输出端口（即避免带宽丢失），调度程序应该能够比NIC TX发送的n个数据包更快地调度n个数据包。
+*   Pipe P of subport S is currently selected by one of the port grinders;
 
-假设没有端口超过流量，调度程序需要跟上管道令牌桶配置的每个管道的速率。这意味着管道令牌桶的大小应该设置得足够高，以防止它由于大的SRTD而溢出，因为这将导致管道的信用损失（带宽损失）。
+*   Traffic class TC is the highest priority active traffic class of pipe P;
 
-信用逻辑
-^^^^^^^^^^^^
+*   Queue Q is the next queue selected by WRR within traffic class TC of pipe P;
 
-调度决策
-"""""""""
+*   Subport S has enough credits to send the packet;
 
-当满足以下所有条件时，从（subport S，pipe P，traffic class TC，queue Q）发送下一个分组的调度决定（分组被发送）：
+*   Subport S has enough credits for traffic class TC to send the packet;
 
-*  Subport S的Pipe P目前由一个端口调度选择；
+*   Pipe P has enough credits to send the packet;
 
-*  流量类TC是管道P的最高优先级的主要流量类别；
+*   Pipe P has enough credits for traffic class TC to send the packet.
 
-*  队列Q是管道P的流量类TC内由WRR选择的下一个队列；
+If all the above conditions are met,
+then the packet is selected for transmission and the necessary credits are subtracted from subport S,
+subport S traffic class TC, pipe P, pipe P traffic class TC.
 
-*  子接口S有足够的信用来发送数据包；
+Framing Overhead
+""""""""""""""""
 
-*  子接口S具有足够的信用流量类TC来发送数据包；
-
-*  管道P有足够的信用来发送数据包；
-
-*  管道P具有足够的信用用于流量类TC发送数据包。
-
-如果满足所有上述条件，则选择分组进行传输，并从子接口S，子接口S流量类TC，管道P，管道P流量类TC中减去必要的信用。
-
-帧开销
-""""""""
-
-由于所有数据包长度的最大公约数为1个字节，所以信用单位被选为1个字节。传输n个字节的报文所需的信用数量等于（n + h），其中h等于每个报文的成帧开销字节数。
+As the greatest common divisor for all packet lengths is one byte, the unit of credit is selected as one byte.
+The number of credits required for the transmission of a packet of n bytes is equal to (n+h),
+where h is equal to the number of framing overhead bytes per packet.
 
 .. _table_qos_5:
 
@@ -481,7 +592,7 @@ Internal Data Structures per Port
    | 2 | Start of Frame Delimiter (SFD) | 1              |                                                                           |
    |   |                                |                |                                                                           |
    +---+--------------------------------+----------------+---------------------------------------------------------------------------+
-   | 3 | Frame Check Sequence (FCS)     | 4              | 当mbuf包长度字段中不包含时这里才需要考虑开销。                            |
+   | 3 | Frame Check Sequence (FCS)     | 4              | Considered overhead only if not included in the mbuf packet length field. |
    |   |                                |                |                                                                           |
    +---+--------------------------------+----------------+---------------------------------------------------------------------------+
    | 4 | Inter Frame Gap (IFG)          | 12             |                                                                           |
@@ -601,7 +712,7 @@ where, r = port line rate (in bytes per second).
    |   |                         |     of the grinders), update the credits for the pipe and its subport.      |
    |   |                         |                                                                             |
    |   |                         | The current implementation is using option 3.  According to Section         |
-   |   |                         | "Dequeue State Machine", the pipe and subport credits are                   |
+   |   |                         | `Dequeue State Machine`_, the pipe and subport credits are                  |
    |   |                         | updated every time a pipe is selected by the dequeue process before the     |
    |   |                         | pipe and subport credits are actually used.                                 |
    |   |                         |                                                                             |
@@ -672,7 +783,7 @@ as described in :numref:`table_qos_10` and :numref:`table_qos_11`.
    | 1 | tc_time               | Bytes | Time of the next update (upper limit refill) for the 4 TCs of the     |
    |   |                       |       | current subport / pipe.                                               |
    |   |                       |       |                                                                       |
-   |   |                       |       | See  Section "Internal Time Reference"for the                         |
+   |   |                       |       | See  Section `Internal Time Reference`_ for the                       |
    |   |                       |       | explanation of why the time is maintained in byte units.              |
    |   |                       |       |                                                                       |
    +---+-----------------------+-------+-----------------------------------------------------------------------+
@@ -1223,7 +1334,7 @@ Where:
 
 The time reference is in units of bytes,
 where a byte signifies the time duration required by the physical interface to send out a byte on the transmission medium
-(see Section "Internal Time Reference").
+(see Section `Internal Time Reference`_).
 The parameter s is defined in the dropper module as a constant with the value: s=2^22.
 This corresponds to the time required by every leaf node in a hierarchy with 64K leaf nodes
 to transmit one 64-byte packet onto the wire and represents the worst case scenario.

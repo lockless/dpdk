@@ -30,21 +30,20 @@
 
 .. _kni:
 
-Kernel NIC Interface
+内核网络接口卡接口
 ====================
 
-The DPDK Kernel NIC Interface (KNI) allows userspace applications access to the Linux* control plane.
+DPDK Kernel NIC Interface（KNI）允许用户空间应用程序访问Linux *控制面。
 
-The benefits of using the DPDK KNI are:
+使用DPDK KNI的好处是：
 
-*   Faster than existing Linux TUN/TAP interfaces
-    (by eliminating system calls and copy_to_user()/copy_from_user() operations.
+*   比现有的Linux TUN / TAP接口更快（通过消除系统调用和copy_to_user()/copy_from_user()操作）。
 
-*   Allows management of DPDK ports using standard Linux net tools such as ethtool, ifconfig and tcpdump.
+*   允许使用标准Linux网络工具（如ethtool，ifconfig和tcpdump）管理DPDK端口。
 
-*   Allows an interface with the kernel network stack.
+*   允许与内核网络堆栈的接口。
 
-The components of an application using the DPDK Kernel NIC Interface are shown in :numref:`figure_kernel_nic_intf`.
+使用DPDK内核NIC接口的应用程序的组件如图所示。 :numref:`figure_kernel_nic_intf`.
 
 .. _figure_kernel_nic_intf:
 
@@ -53,68 +52,56 @@ The components of an application using the DPDK Kernel NIC Interface are shown i
    Components of a DPDK KNI Application
 
 
-The DPDK KNI Kernel Module
---------------------------
+DPDK KNI内核模块
+------------------
 
-The KNI kernel loadable module provides support for two types of devices:
+KNI内核可加载模块支持两种类型的设备：
 
-*   A Miscellaneous device (/dev/kni) that:
+*   其他设备：(/dev/kni) 
 
-    *   Creates net devices (via ioctl  calls).
+    *   创建网络设备（通过ioctl调用）。
 
-    *   Maintains a kernel thread context shared by all KNI instances
-        (simulating the RX side of the net driver).
+    *   维护所有KNI实例共享的内核线程上下文（模拟网络驱动程序的RX端）。
 
-    *   For single kernel thread mode, maintains a kernel thread context shared by all KNI instances
-        (simulating the RX side of the net driver).
+    *   对于单内核线程模式，维护所有KNI实例共享的内核线程上下文（模拟网络驱动程序的RX端）。
 
-    *   For multiple kernel thread mode, maintains a kernel thread context for each KNI instance
-        (simulating the RX side of the new driver).
+    *   对于多个内核线程模式，为每个KNI实例（模拟新驱动程序的RX侧）维护一个内核线程上下文。
 
-*   Net device:
+*   网络设备：
 
-    *   Net functionality provided by implementing several operations such as netdev_ops,
-        header_ops, ethtool_ops that are defined by struct net_device,
-        including support for DPDK mbufs and FIFOs.
+    *   通过实现由struct net_device定义的诸如netdev_ops，header_ops，ethtool_ops之类的几个操作提供的Net功能，包括支持DPDK mbufs和FIFO。
 
-    *   The interface name is provided from userspace.
+    *   接口名称由用户空间提供。
 
-    *   The MAC address can be the real NIC MAC address or random.
+    *   MAC地址可以是真正的NIC MAC地址或随机的。
 
-KNI Creation and Deletion
--------------------------
-
-The KNI interfaces are created by a DPDK application dynamically.
-The interface name and FIFO details are provided by the application through an ioctl call
-using the rte_kni_device_info struct which contains:
-
-*   The interface name.
-
-*   Physical addresses of the corresponding memzones for the relevant FIFOs.
-
-*   Mbuf mempool details, both physical and virtual (to calculate the offset for mbuf pointers).
-
-*   PCI information.
-
-*   Core affinity.
-
-Refer to rte_kni_common.h in the DPDK source code for more details.
-
-The physical addresses will be re-mapped into the kernel address space and stored in separate KNI contexts.
-
-The affinity of kernel RX thread (both single and multi-threaded modes) is controlled by force_bind and
-core_id config parameters.
-
-The KNI interfaces can be deleted by a DPDK application dynamically after being created.
-Furthermore, all those KNI interfaces not deleted will be deleted on the release operation
-of the miscellaneous device (when the DPDK application is closed).
-
-DPDK mbuf Flow
+KNI创建及删除
 --------------
 
-To minimize the amount of DPDK code running in kernel space, the mbuf mempool is managed in userspace only.
-The kernel module will be aware of mbufs,
-but all mbuf allocation and free operations will be handled by the DPDK application only.
+KNI接口由DPDK应用程序动态创建。接口名称和FIFO详细信息由应用程序通过ioctl调用使用rte_kni_device_info结构提供，该结构包含：
+
+*   接口名称。
+
+*   相关FIFO的相应存储器的物理地址。
+
+*   Mbuf mempool详细信息，包括物理和虚拟（计算mbuf指针的偏移量）。
+
+*   PCI信息。
+
+*   Core。
+
+有关详细信息，请参阅DPDK源代码中的rte_kni_common.h。
+
+物理地址将重新映射到内核地址空间，并存储在单独的KNI上下文中。
+
+内核RX线程（单线程和多线程模式）的亲和力由force_bind和core_id配置参数控制。
+
+创建后，DPDK应用程序可以动态删除KNI接口。此外，所有未删除的KNI接口将在杂项设备（DPDK应用程序关闭时）的释放操作中被删除。
+
+DPDK缓冲区流
+--------------
+
+为了最小化在内核空间中运行的DPDK代码的数量，mbuf mempool仅在用户空间中进行管理。内核模块可以感知mbufs，但是所有mbuf分配和释放操作将仅由DPDK应用程序处理。
 
 :numref:`figure_pkt_flow_kni` shows a typical scenario with packets sent in both directions.
 
@@ -125,46 +112,30 @@ but all mbuf allocation and free operations will be handled by the DPDK applicat
    Packet Flow via mbufs in the DPDK KNI
 
 
-Use Case: Ingress
+用例: Ingress
 -----------------
 
-On the DPDK RX side, the mbuf is allocated by the PMD in the RX thread context.
-This thread will enqueue the mbuf in the rx_q FIFO.
-The KNI thread will poll all KNI active devices for the rx_q.
-If an mbuf is dequeued, it will be converted to a sk_buff and sent to the net stack via netif_rx().
-The dequeued mbuf must be freed, so the same pointer is sent back in the free_q FIFO.
+在DPDK RX侧，mbuf由PMD在RX线程上下文中分配。该线程将mbuf入队到rx_q FIFO中。 KNI线程将轮询所有KNI活动设备。如果mbuf出队，它将被转换为sk_buff，并通过netif_rx()发送到网络协议栈。必须释放出队的mbuf，将指针返回到free_q FIFO中。
 
-The RX thread, in the same main loop, polls this FIFO and frees the mbuf after dequeuing it.
+RX线程在相同的主循环中轮询该FIFO，并在出队之后释放mbuf。
 
-Use Case: Egress
+用例: Egress
 ----------------
 
-For packet egress the DPDK application must first enqueue several mbufs to create an mbuf cache on the kernel side.
+对于数据包出口，DPDK应用程序必须首先入队几个mbufs才能在内核端创建一个mbuf缓存。
 
-The packet is received from the Linux net stack, by calling the kni_net_tx() callback.
-The mbuf is dequeued (without waiting due the cache) and filled with data from sk_buff.
-The sk_buff is then freed and the mbuf sent in the tx_q FIFO.
+通过调用kni_net_tx()回调，从Linux网络堆栈接收数据包。mbuf出队（因为使用缓存，所以无需等待），并填充了来自sk_buff的数据。然后释放sk_buff，并将mbuf发送到tx_q FIFO。
 
-The DPDK TX thread dequeues the mbuf and sends it to the PMD (via rte_eth_tx_burst()).
-It then puts the mbuf back in the cache.
+DPDK TX线程执行mbuf出队，并将其发送到PMD（通过rte_eth_tx_burst()）。 然后将mbuf放回缓存中。
 
-Ethtool
--------
+以太网工具
+-----------
 
-Ethtool is a Linux-specific tool with corresponding support in the kernel
-where each net device must register its own callbacks for the supported operations.
-The current implementation uses the igb/ixgbe modified Linux drivers for ethtool support.
-Ethtool is not supported in i40e and VMs (VF or EM devices).
+Ethtool是Linux专用工具，在内核中具有相应的支持，每个网络设备必须为支持的操作注册自己的回调。目前的实现使用igb / ixgbe修改的Linux驱动程序进行ethtool支持。i40e和VM（VF或EM设备）不支持Ethtool。
 
-Link state and MTU change
--------------------------
+链路状态及MTU改变
+-------------------
 
-Link state and MTU change are network interface specific operations usually done via ifconfig.
-The request is initiated from the kernel side (in the context of the ifconfig process)
-and handled by the user space DPDK application.
-The application polls the request, calls the application handler and returns the response back into the kernel space.
+链路状态和MTU变化是通常通过ifconfig完成的网络接口操作。该请求是从内核端（在ifconfig进程的上下文中）发起的，由用户空间DPDK应用程序处理。应用程序轮询请求，调用应用程序处理程序并将响应返回到内核空间。
 
-The application handlers can be registered upon interface creation or explicitly registered/unregistered in runtime.
-This provides flexibility in multiprocess scenarios
-(where the KNI is created in the primary process but the callbacks are handled in the secondary one).
-The constraint is that a single process can register and handle the requests.
+应用处理程序可以在创建接口时注册，也可以在运行时再注册/卸载。这提供了多进程方案（其中KNI在primary process中创建，在secondary process中处理回调）的灵活性。约束是单个进程可以注册和处理请求。

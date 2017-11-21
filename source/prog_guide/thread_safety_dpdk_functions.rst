@@ -28,75 +28,38 @@
     (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
     OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-Thread Safety of DPDK Functions
-===============================
+DPDK功能的线程安全
+===================
 
-The DPDK is comprised of several libraries.
-Some of the functions in these libraries can be safely called from multiple threads simultaneously, while others cannot.
-This section allows the developer to take these issues into account when building their own application.
+DPDK由几个库组成。这些库中的某些功能可以同时被多个线程安全地调用，而另一部分则不能。 本节介绍开发人员在构建自己的应用程序时考虑这些问题。
 
-The run-time environment of the DPDK is typically a single thread per logical core.
-In some cases, it is not only multi-threaded, but multi-process.
-Typically, it is best to avoid sharing data structures between threads and/or processes where possible.
-Where this is not possible, then the execution blocks must access the data in a thread- safe manner.
-Mechanisms such as atomics or locking can be used that will allow execution blocks to operate serially.
-However, this can have an effect on the performance of the application.
+DPDK的运行时环境通常是每个逻辑核上的单个线程。但是，在某些情况下，它不仅是多线程的，而且是多进程的。通常，最好避免在在线程和/或进程之间共享数据结构。如果不可能，则执行块必须以线程安全的方式访问数据。可以使用诸如原子操作或锁的机制，这将允许执行块串行操作。但是，这可能会对应用程序的性能产生影响。
 
-Fast-Path APIs
+快速路径API
 --------------
 
-Applications operating in the data plane are performance sensitive but
-certain functions within those libraries may not be safe to call from multiple threads simultaneously.
-The hash, LPM and mempool libraries and RX/TX in the PMD are examples of this.
+在数据面中运行的应用程序对性能敏感，但这些库中的某些函数可能不会多线程并发调用。PMD中的Hash，LPM和mempool库以及RX / TX都是这样的例子。
 
-The hash and LPM libraries are, by design, thread unsafe in order to maintain performance.
-However, if required the developer can add layers on top of these libraries to provide thread safety.
-Locking is not needed in all situations, and in both the hash and LPM libraries,
-lookups of values can be performed in parallel in multiple threads.
-Adding, removing or modifying values, however,
-cannot be done in multiple threads without using locking when a single hash or LPM table is accessed.
-Another alternative to locking would be to create multiple instances of these tables allowing each thread its own copy.
+通过设计，Hash和LPM库线程不安全，不能并行调用，以保持性能。然而，如果需要，开发人员可以在这些库之上添加封装层以提供线程安全性。在所有情况下都不需要锁，并且在哈希和LPM库中，可以在多个线程中并行执行值的查找。但是，当访问单个哈希表或LPM表时，添加，删除或修改值不能不使用锁在多个线程中完成。锁的另一个替代方法是创建这些表的多个实例，允许每个线程自己的副本。
 
-The RX and TX of the PMD are the most critical aspects of a DPDK application
-and it is recommended that no locking be used as it will impact performance.
-Note, however, that these functions can safely be used from multiple threads
-when each thread is performing I/O on a different NIC queue.
-If multiple threads are to use the same hardware queue on the same NIC port,
-then locking, or some other form of mutual exclusion, is necessary.
+PMD的RX和TX是DPDK应用程序中最关键的方面，建议不要使用锁，因为它会影响性能。但是请注意，当每个线程在不同的NIC队列上执行I/O时，这些功能可以安全地从多个线程使用。如果多个线程在同一个NIC端口上使用相同的硬件队列，则需要锁定或某种其他形式的互斥。
 
-The ring library is based on a lockless ring-buffer algorithm that maintains its original design for thread safety.
-Moreover, it provides high performance for either multi- or single-consumer/producer enqueue/dequeue operations.
-The mempool library is based on the DPDK lockless ring library and therefore is also multi-thread safe.
+Ring库的实现基于无锁缓冲算法，保持其原有的线程安全设计。此外，它可以为多个或单个消费者/生产者入队/出队操作提供高性能。mempool库基于DPDK无锁ring库，因此也是多线程安全的。
 
-Performance Insensitive API
----------------------------
+非性能敏感API
+---------------
 
-Outside of the performance sensitive areas described in Section 25.1,
-the DPDK provides a thread-safe API for most other libraries.
-For example, malloc and memzone functions are safe for use in multi-threaded and multi-process environments.
+在第25.1节描述的性能敏感区域之外，DPDK为大多数其他库提供线程安全的API。例如，malloc和memzone功能可以安全地用于多线程和多进程环境中。
 
-The setup and configuration of the PMD is not performance sensitive, but is not thread safe either.
-It is possible that the multiple read/writes during PMD setup and configuration could be corrupted in a multi-thread environment.
-Since this is not performance sensitive, the developer can choose to add their own layer to provide thread-safe setup and configuration.
-It is expected that, in most applications, the initial configuration of the network ports would be done by a single thread at startup.
+PMD的设置和配置不是性能敏感的，但也不是线程安全的。在多线程环境中PMD设置和配置期间的多次读/写可能会被破坏。由于这不是性能敏感的，开发人员可以选择添加自己的层，以提供线程安全的设置和配置。预计在大多数应用中，网络端口的初始配置将由启动时的单个线程完成。
 
-Library Initialization
-----------------------
+库初始化
+---------
 
-It is recommended that DPDK libraries are initialized in the main thread at application startup
-rather than subsequently in the forwarding threads.
-However, the DPDK performs checks to ensure that libraries are only initialized once.
-If initialization is attempted more than once, an error is returned.
+建议DPDK库在应用程序启动时在主线程中初始化，而不是随后在转发线程中初始化。但是，DPDK会执行检查，以确保库仅被初始化一次。如果尝试多次初始化，则返回错误。
+在多进程情况下，共享内存的配置信息只能由primary process初始化。此后，primary process和secondary process都可以分配/释放最终依赖于rte_malloc或memzone的任何内存对象。
 
-In the multi-process case, the configuration information of shared memory will only be initialized by the master process.
-Thereafter, both master and secondary processes can allocate/release any objects of memory that finally rely on rte_malloc or memzones.
+中断线程
+----------
 
-Interrupt Thread
-----------------
-
-The DPDK works almost entirely in Linux user space in polling mode.
-For certain infrequent operations, such as receiving a PMD link status change notification,
-callbacks may be called in an additional thread outside the main DPDK processing threads.
-These function callbacks should avoid manipulating DPDK objects that are also managed by the normal DPDK threads,
-and if they need to do so,
-it is up to the application to provide the appropriate locking or mutual exclusion restrictions around those objects.
+DPDK在轮询模式下几乎完全用于Linux用户空间。对于诸如接收PMD链路状态改变通知的某些不经常的操作，可以在主DPDK处理线程外部的附加线程中调用回调。这些函数回调应避免操作也由普通DPDK线程管理的DPDK对象，如果需要这样做，应用程序就可以为这些对象提供适当的锁定或互斥限制。

@@ -30,13 +30,14 @@
 
 .. _Building_Your_Own_Application:
 
-构建你自己的应用程序
-======================
+Building Your Own Application
+=============================
 
-在DPDK中编译一个示例程序
---------------------------
+Compiling a Sample Application in the Development Kit Directory
+---------------------------------------------------------------
 
-当编译示例应用程序(如 hello world)时，需要导出变量：RTE_SDK 和 RTE_TARGET。
+When compiling a sample application (for example, hello world), the following variables must be exported:
+RTE_SDK and RTE_TARGET.
 
 .. code-block:: console
 
@@ -49,17 +50,17 @@
         INSTALL-APP helloworld
         INSTALL-MAP helloworld.map
 
-生成的二进制文件默认放在build目录下：
+The binary is generated in the build directory by default:
 
 .. code-block:: console
 
     ~/DPDK/examples/helloworld$ ls build/app
     helloworld helloworld.map
 
-在DPDK外构建自己的应用程序
-----------------------------
+Build Your Own Application Outside the Development Kit
+------------------------------------------------------
 
-示例应用程序(Hello World)可以复制到一个新的目录中作为开发目录：
+The sample application (Hello World) can be duplicated in a new directory as a starting point for your development:
 
 .. code-block:: console
 
@@ -73,49 +74,53 @@
         INSTALL-APP helloworld
         INSTALL-MAP helloworld.map
 
-定制 Makefiles
-----------------
+Customizing Makefiles
+---------------------
 
-应用程序 Makefile
+Application Makefile
 ~~~~~~~~~~~~~~~~~~~~
 
-示例应用程序默认的makefile可以作为一个很好的起点，我们可以直接修订使用。它包括：
+The default makefile provided with the Hello World sample application is a good starting point. It includes:
 
-*   起始处包含 $(RTE_SDK)/mk/rte.vars.mk 
+*   $(RTE_SDK)/mk/rte.vars.mk at the beginning
 
-*   终止处包含 $(RTE_SDK)/mk/rte.extapp.mk
+*   $(RTE_SDK)/mk/rte.extapp.mk at the end
 
-用户必须配置几个变量：
+The user must define several variables:
 
-*   APP: 应用程序的名称
+*   APP: Contains the name of the application.
 
-*   SRCS-y: 源文件列表(\*.c, \*.S)。
+*   SRCS-y: List of source files (\*.c, \*.S).
 
-库 Makefile
-~~~~~~~~~~~~~
+Library Makefile
+~~~~~~~~~~~~~~~~
 
-同样的方法也可以用于构建库：
+It is also possible to build a library in the same way:
 
-*   起始处包含 $(RTE_SDK)/mk/rte.vars.mk
+*   Include $(RTE_SDK)/mk/rte.vars.mk at the beginning.
 
-*   终止处包含 $(RTE_SDK)/mk/rte.extlib.mk
+*   Include $(RTE_SDK)/mk/rte.extlib.mk  at the end.
 
-唯一的不同之处就是用LIB名称替换APP的名称，例如：libfoo.a。
+The only difference is that APP should be replaced by LIB, which contains the name of the library. For example, libfoo.a.
 
-定制 Makefile 动作
-~~~~~~~~~~~~~~~~~~~~
+Customize Makefile Actions
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-可以通过定制一些变量来制定 Makefile 动作。常用的动作列表可以参考文档 :ref:`Development Kit Build System <Development_Kit_Build_System>` 章节  :ref:`Makefile Description <Makefile_Description>` 。
+Some variables can be defined to customize Makefile actions. The most common are listed below. Refer to
+:ref:`Makefile Description <Makefile_Description>` section in
+:ref:`Development Kit Build System <Development_Kit_Build_System>`
 
+chapter for details.
 
-*   VPATH: 构建系统将搜索的源文件目录，默认情况下 RTE_SRCDIR 将被包含在 VPATH 中。
+*   VPATH: The path list where the build system will search for sources. By default,
+    RTE_SRCDIR will be included in VPATH.
 
-*   CFLAGS_my_file.o: 编译c文件时指定的编译flag标志。
+*   CFLAGS_my_file.o: The specific flags to add for C compilation of my_file.c.
 
-*   CFLAGS: C编译标志。
+*   CFLAGS: The flags to use for C compilation.
 
-*   LDFLAGS: 链接标志。
+*   LDFLAGS: The flags to use for linking.
 
-*   CPPFLAGS: 预处理器标志（只是用于汇编.s文件）。
+*   CPPFLAGS: The flags to use to provide flags to the C preprocessor (only useful when assembling .S files)
 
-*   LDLIBS: 链接库列表(如 -L /path/to/libfoo - lfoo)。
+*   LDLIBS: A list of libraries to link with (for example, -L /path/to/libfoo - lfoo)

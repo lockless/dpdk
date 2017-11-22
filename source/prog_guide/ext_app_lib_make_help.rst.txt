@@ -30,38 +30,38 @@
 
 .. _External_Application/Library_Makefile_help:
 
-外部应用程序/库的 Makefile
-=============================
+External Application/Library Makefile help
+==========================================
 
-外部的应用程序或库必须包含RTE_SDK指定的位于mk目录中的Makefiles文件。
-这些Makefiles包括：
+External applications or libraries should include specific Makefiles from RTE_SDK, located in mk directory.
+These Makefiles are:
 
-*   ${RTE_SDK}/mk/rte.extapp.mk: 构建一个应用程序。
+*   ${RTE_SDK}/mk/rte.extapp.mk: Build an application
 
-*   ${RTE_SDK}/mk/rte.extlib.mk: 构建一个静态库。
+*   ${RTE_SDK}/mk/rte.extlib.mk: Build a static library
 
-*   ${RTE_SDK}/mk/rte.extobj.mk: 购件一个目标文件。
+*   ${RTE_SDK}/mk/rte.extobj.mk: Build objects (.o)
 
-前提
-------
-
-必须定义以下变量：
-
-*   ${RTE_SDK}: 指向DPDK根目录。
-
-*   ${RTE_TARGET}: 指向用于编译的目标编译器(如x86_64-native-linuxapp-gcc)。
-
-构建 Targets
+Prerequisites
 -------------
 
-支持构建target时指定输出文件的目录，使用 O=mybuilddir 选项。
-这是可选的，默认的输出目录是build。
+The following variables must be defined:
 
-*   all, "nothing" (仅make)
+*   ${RTE_SDK}: Points to the root directory of the DPDK.
 
-    编译应用程序或库到指定的输出目录中。
+*   ${RTE_TARGET}: Reference the target to be used for compilation (for example, x86_64-native-linuxapp-gcc).
 
-    例如：
+Build Targets
+-------------
+
+Build targets support the specification of the name of the output directory, using O=mybuilddir.
+This is optional; the default output directory is build.
+
+*   all, "nothing" (meaning just make)
+
+    Build the application or the library in the specified output directory.
+
+    Example:
 
     .. code-block:: console
 
@@ -69,9 +69,9 @@
 
 *   clean
 
-    清除make操作产生的所有目标文件。
+    Clean all objects created using make build.
 
-    例如：
+    Example:
 
     .. code-block:: console
 
@@ -82,41 +82,41 @@ Help Targets
 
 *   help
 
-    显示帮助信息。
+    Show this help.
 
-其他有用的命令行变量
-----------------------
+Other Useful Command-line Variables
+-----------------------------------
 
-以下变量可以在命令行中指定：
+The following variables can be specified at the command line:
 
 *   S=
 
-    指定源文件的位置。默认情况下是当前目录。
+    Specify the directory in which the sources are located. By default, it is the current directory.
 
 *   M=
 
-    指定需要被调用的Makefile。默认情况下使用 $(S)/Makefile。
+    Specify the Makefile to call once the output directory is created. By default, it uses $(S)/Makefile.
 
 *   V=
 
-    使能详细编译（显示完全编译命令及一些中间命令过程）。
+    Enable verbose build (show full compilation command line and some intermediate commands).
 
 *   D=
 
-    启用依赖关系调试。提供了一些有用的信息。
+    Enable dependency debugging. This provides some useful information about why a target must be rebuilt or not.
 
 *   EXTRA_CFLAGS=, EXTRA_LDFLAGS=, EXTRA_ASFLAGS=, EXTRA_CPPFLAGS=
 
-    添加的编译、连接或汇编标志。
+    Append specific compilation, link or asm flags.
 
 *   CROSS=
 
-    指定一个交叉工具链，该前缀将作为所有gcc/binutils应用程序的前缀。只有在gcc下才起作用。
+    Specify a cross-toolchain header that will prefix all gcc/binutils applications. This only works when using gcc.
 
-从其他目录中编译
-------------------
+Make from Another Directory
+---------------------------
 
-通过指定输出和源目录，可以从另一个目录运行Makefile。 例如：
+It is possible to run the Makefile from another directory, by specifying the output and the source dir. For example:
 
 .. code-block:: console
 

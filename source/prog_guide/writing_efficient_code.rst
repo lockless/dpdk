@@ -28,95 +28,83 @@
     (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
     OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-Writing Efficient Code
-======================
+编写高效代码
+==============
 
-This chapter provides some tips for developing efficient code using the DPDK.
-For additional and more general information,
-please refer to the *Intel® 64 and IA-32 Architectures Optimization Reference Manual*
-which is a valuable reference to writing efficient code.
+本章提供了一些使用DPDK开发高效代码的技巧。
+有关其他更详细的信息，请参阅 *Intel® 64 and IA-32 Architectures Optimization Reference Manual* ，这是编写高效代码的宝贵参考。
 
-Memory
+内存
 ------
 
-This section describes some key memory considerations when developing applications in the DPDK environment.
+本节介绍在DPDK环境中开发应用程序时使用内存的一些关键注意事项。
 
-Memory Copy: Do not Use libc in the Data Plane
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+内存拷贝：不要在数据面程序中使用libc
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Many libc functions are available in the DPDK, via the Linux* application environment.
-This can ease the porting of applications and the development of the configuration plane.
-However, many of these functions are not designed for performance.
-Functions such as memcpy() or strcpy() should not be used in the data plane.
-To copy small structures, the preference is for a simpler technique that can be optimized by the compiler.
-Refer to the *VTune™ Performance Analyzer Essentials* publication from Intel Press for recommendations.
+通过Linux应用程序环境，DPDK中可以使用许多libc函数。
+这可以简化应用程序的移植和控制平面的开发。
+但是，这些功能中有许多不是为了性能而设计的。
+诸如memcpy() 或 strcpy() 之类的函数不应该在数据平面中使用。
+要复制小型结构体，首选方法是编译器可以优化一个更简单的技术。
+请参阅英特尔新出版的  *VTune™ Performance Analyzer Essentials* 以获取建议。
 
-For specific functions that are called often,
-it is also a good idea to provide a self-made optimized function, which should be declared as static inline.
+对于经常调用的特定函数，提供一个自制的优化函数也是一个好主意，该函数应声明为静态内联。
 
-The DPDK API provides an optimized rte_memcpy() function.
+DPDK API提供了一个优化的rte_memcpy() 函数。
 
-Memory Allocation
-~~~~~~~~~~~~~~~~~
+内存申请
+~~~~~~~~~~
 
-Other functions of libc, such as malloc(), provide a flexible way to allocate and free memory.
-In some cases, using dynamic allocation is necessary,
-but it is really not advised to use malloc-like functions in the data plane because
-managing a fragmented heap can be costly and the allocator may not be optimized for parallel allocation.
+libc的其他功能，如malloc()，提供了一种灵活的方式来分配和释放内存。
+在某些情况下，使用动态分配是必要的，但是建议不要在数据层面使用类似malloc的函数，因为管理碎片堆可能代价高昂，并且分配器可能无法针对并行分配进行优化。
 
-If you really need dynamic allocation in the data plane, it is better to use a memory pool of fixed-size objects.
-This API is provided by librte_mempool.
-This data structure provides several services that increase performance, such as memory alignment of objects,
-lockless access to objects, NUMA awareness, bulk get/put and per-lcore cache.
-The rte_malloc () function uses a similar concept to mempools.
+如果您确实需要在数据平面中进行动态分配，最好使用固定大小对象的内存池。
+这个API由librte_mempool提供。
+这个数据结构提供了一些提高性能的服务，比如对象的内存对齐，对对象的无锁访问，NUMA感知，批量get/put和percore缓存。
+rte_malloc() 函数对mempools使用类似的概念。
 
-Concurrent Access to the Same Memory Area
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+内存区域的并发访问
+~~~~~~~~~~~~~~~~~~~~
 
-Read-Write (RW) access operations by several lcores to the same memory area can generate a lot of data cache misses,
-which are very costly.
-It is often possible to use per-lcore variables, for example, in the case of statistics.
-There are at least two solutions for this:
+几个lcore对同一个内存区域进行的读写（RW）访问操作可能会产生大量的数据高速缓存未命中，这代价非常昂贵。
+通常可以使用per-lcore变量来解决这类问题。例如，在统计的情况下。
+至少有两个解决方案：
 
-*   Use RTE_PER_LCORE variables. Note that in this case, data on lcore X is not available to lcore Y.
+*   使用 RTE_PER_LCORE 变量。注意，在这种情况下，处于lcore x的数据在lcore y上是无效的。
 
-*   Use a table of structures (one per lcore). In this case, each structure must be cache-aligned.
+*   使用一个表结构（每个lcore一个）。在这种情况下，每个结构都必须缓存对齐。
 
-Read-mostly variables can be shared among lcores without performance losses if there are no RW variables in the same cache line.
+如果在同一缓存行中没有RW变量，那么读取主要变量可以在不损失性能的情况下在内核之间共享。
 
 NUMA
 ~~~~
 
-On a NUMA system, it is preferable to access local memory since remote memory access is slower.
-In the DPDK, the memzone, ring, rte_malloc and mempool APIs provide a way to create a pool on a specific socket.
+在NUMA系统上，由于远程内存访问速度较慢，所以最好访问本地内存。
+在DPDK中，memzone，ring，rte_malloc和mempool API提供了在特定内存槽上创建内存池的方法。
 
-Sometimes, it can be a good idea to duplicate data to optimize speed.
-For read-mostly variables that are often accessed,
-it should not be a problem to keep them in one socket only, since data will be present in cache.
+有时候，复制数据以优化速度可能是一个好主意。
+对于经常访问的大多数读取变量，将它们保存在一个socket中应该不成问题，因为数据将存在于缓存中。
 
-Distribution Across Memory Channels
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+跨存储器通道分配
+~~~~~~~~~~~~~~~~~~
 
-Modern memory controllers have several memory channels that can load or store data in parallel.
-Depending on the memory controller and its configuration,
-the number of channels and the way the memory is distributed across the channels varies.
-Each channel has a bandwidth limit,
-meaning that if all memory access operations are done on the first channel only, there is a potential bottleneck.
+现代内存控制器具有许多内存通道，可以支持并行数据读写操作。
+根据内存控制器及其配置，通道数量和内存在通道中的分布方式会有所不同。
+每个通道都有带宽限制，这意味着如果所有的存储器访问都在同一通道上完成，则存在潜在的性能瓶颈。
 
-By default, the  :ref:`Mempool Library <Mempool_Library>` spreads the addresses of objects among memory channels.
+默认情况下， :ref:`Mempool Library <Mempool_Library>` 分配对象在内存通道中的地址。
 
-Communication Between lcores
-----------------------------
+lcore之间的通信
+-----------------
 
-To provide a message-based communication between lcores,
-it is advised to use the DPDK ring API, which provides a lockless ring implementation.
+为了在内核之间提供基于消息的通信，建议使用提供无锁环实现的DPDK ring API。
 
-The ring supports bulk and burst access,
-meaning that it is possible to read several elements from the ring with only one costly atomic operation
-(see :doc:`ring_lib`).
-Performance is greatly improved when using bulk access operations.
+该环支持批量访问和突发访问，这意味着只需要一次昂贵的原子操作即可从环中读取多个元素（请参阅 :doc:`ring_lib` ）。
 
-The code algorithm that dequeues messages may be something similar to the following:
+使用批量访问操作时，性能会大大提高。
+
+出队消息的代码算法可能类似于以下内容：
 
 .. code-block:: c
 
@@ -131,102 +119,80 @@ The code algorithm that dequeues messages may be something similar to the follow
         my_process_bulk(obj_table, count);
    }
 
-PMD Driver
+PMD 驱动
 ----------
 
-The DPDK Poll Mode Driver (PMD) is also able to work in bulk/burst mode,
-allowing the factorization of some code for each call in the send or receive function.
+DPDK轮询模式驱动程序（PMD）也能够在批量/突发模式下工作，允许在发送或接收功能中对每个呼叫的一些代码进行分解。
 
-Avoid partial writes.
-When PCI devices write to system memory through DMA,
-it costs less if the write operation is on a full cache line as opposed to part of it.
-In the PMD code, actions have been taken to avoid partial writes as much as possible.
+避免部分写入。
+当PCI设备通过DMA写入系统存储器时，如果写入操作位于完全缓存行而不是部分写入操作，则其花费较少。
+在PMD代码中，已采取了尽可能避免部分写入的措施。
 
-Lower Packet Latency
-~~~~~~~~~~~~~~~~~~~~
+低报文延迟
+~~~~~~~~~~~~
 
-Traditionally, there is a trade-off between throughput and latency.
-An application can be tuned to achieve a high throughput,
-but the end-to-end latency of an average packet will typically increase as a result.
-Similarly, the application can be tuned to have, on average,
-a low end-to-end latency, at the cost of lower throughput.
+传统上，吞吐量和延迟之间有一个折衷。
+可以调整应用程序以实现高吞吐量，但平均数据包的端到端延迟通常会因此而增加。
+类似地，可以将应用程序调整为平均具有低端到端延迟，但代价是较低的吞吐量。
 
-In order to achieve higher throughput,
-the DPDK attempts to aggregate the cost of processing each packet individually by processing packets in bursts.
+为了实现更高的吞吐量，DPDK尝试通过突发处理数据包来合并单独处理每个数据包的成本。
 
-Using the testpmd application as an example,
-the burst size can be set on the command line to a value of 16 (also the default value).
-This allows the application to request 16 packets at a time from the PMD.
-The testpmd application then immediately attempts to transmit all the packets that were received,
-in this case, all 16 packets.
+以testpmd应用程序为例，突发大小可以在命令行上设置为16（也是默认值）。
+这允许应用程序一次从PMD请求16个数据包。
+然后，testpmd应用程序立即尝试传输所有接收到的数据包，在这种情况下是全部16个数据包。
 
-The packets are not transmitted until the tail pointer is updated on the corresponding TX queue of the network port.
-This behavior is desirable when tuning for high throughput because
-the cost of tail pointer updates to both the RX and TX queues can be spread across 16 packets,
-effectively hiding the relatively slow MMIO cost of writing to the PCIe* device.
-However, this is not very desirable when tuning for low latency because
-the first packet that was received must also wait for another 15 packets to be received.
-It cannot be transmitted until the other 15 packets have also been processed because
-the NIC will not know to transmit the packets until the TX tail pointer has been updated,
-which is not done until all 16 packets have been processed for transmission.
+在网络端口的相应的TX队列上更新尾指针之前，不发送分组。
+当调整高吞吐量时，这种行为是可取的，因为对RX和TX队列的尾指针更新的成本可以分布在16个分组上，
+有效地隐藏了写入PCIe 设备的相对较慢的MMIO成本。
+但是，当调优为低延迟时，这不是很理想，因为接收到的第一个数据包也必须等待另外15个数据包才能被接收。
+直到其他15个数据包也被处理完毕才能被发送，因为直到TX尾指针被更新，NIC才知道要发送数据包，直到所有的16个数据包都被处理完毕才被发送。
 
-To consistently achieve low latency, even under heavy system load,
-the application developer should avoid processing packets in bunches.
-The testpmd application can be configured from the command line to use a burst value of 1.
-This will allow a single packet to be processed at a time, providing lower latency,
-but with the added cost of lower throughput.
+为了始终如一地实现低延迟，即使在系统负载较重的情况下，应用程序开发人员也应避免处理数据包。
+testpmd应用程序可以从命令行配置使用突发值1。
+这将允许一次处理单个数据包，提供较低的延迟，但是增加了较低吞吐量的成本。
 
-Locks and Atomic Operations
----------------------------
+锁和原子操作
+--------------
 
-Atomic operations imply a lock prefix before the instruction,
-causing the processor's LOCK# signal to be asserted during execution of the following instruction.
-This has a big impact on performance in a multicore environment.
+原子操作意味着在指令之前有一个锁定前缀，导致处理器的LOCK＃信号在执行下一条指令时被断言。
+这对多核环境中的性能有很大的影响。
 
-Performance can be improved by avoiding lock mechanisms in the data plane.
-It can often be replaced by other solutions like per-lcore variables.
-Also, some locking techniques are more efficient than others.
-For instance, the Read-Copy-Update (RCU) algorithm can frequently replace simple rwlocks.
+可以通过避免数据平面中的锁定机制来提高性能。
+它通常可以被其他解决方案所取代，比如percore变量。
+而且，一些锁定技术比其他锁定技术更有效率。
+例如，Read-Copy-Update（RCU）算法可以经常替换简单的rwlock
 
-Coding Considerations
----------------------
+编码考虑
+----------
 
-Inline Functions
-~~~~~~~~~~~~~~~~
+内联函数
+~~~~~~~~~~
 
-Small functions can be declared as static inline in the header file.
-This avoids the cost of a call instruction (and the associated context saving).
-However, this technique is not always efficient; it depends on many factors including the compiler.
+小函数可以在头文件中声明为静态内联。
+这避免了调用指令的成本（和关联的上下文保存）。
+但是，这种技术并不总是有效的。 它取决于许多因素，包括编译器。
 
-Branch Prediction
-~~~~~~~~~~~~~~~~~
+分支预测
+~~~~~~~~~~
 
-The Intel® C/C++ Compiler (icc)/gcc built-in helper functions likely() and unlikely()
-allow the developer to indicate if a code branch is likely to be taken or not.
-For instance:
+英特尔的C/C ++编译器icc/gcc内置的帮助函数likely()和unlikely()允许开发人员指出是否可能采取代码分支。
+例如：
 
 .. code-block:: c
 
     if (likely(x > 1))
         do_stuff();
 
-Setting the Target CPU Type
----------------------------
+设置目标CPU类型
+-----------------
 
-The DPDK supports CPU microarchitecture-specific optimizations by means of CONFIG_RTE_MACHINE option
-in the DPDK configuration file.
-The degree of optimization depends on the compiler's ability to optimize for a specific microarchitecture,
-therefore it is preferable to use the latest compiler versions whenever possible.
+DPDK通过DPDK配置文件中的CONFIG_RTE_MACHINE选项支持CPU微体系结构特定的优化。
+优化程度取决于编译器针对特定微架构进行优化的能力，因此，只要有可能，最好使用最新的编译器版本。
 
-If the compiler version does not support the specific feature set (for example, the Intel® AVX instruction set),
-the build process gracefully degrades to whatever latest feature set is supported by the compiler.
+如果编译器版本不支持特定的功能集（例如，英特尔®AVX指令集），则编译过程将优雅地降级到编译器支持的任何最新功能集。
 
-Since the build and runtime targets may not be the same,
-the resulting binary also contains a platform check that runs before the
-main() function and checks if the current machine is suitable for running the binary.
+由于构建和运行时目标可能不相同，因此生成的二进制文件还包含在main()函数之前运行的平台检查，并检查当前机器是否适合运行二进制文件。
 
-Along with compiler optimizations,
-a set of preprocessor defines are automatically added to the build process (regardless of the compiler version).
-These defines correspond to the instruction sets that the target CPU should be able to support.
-For example, a binary compiled for any SSE4.2-capable processor will have RTE_MACHINE_CPUFLAG_SSE4_2 defined,
-thus enabling compile-time code path selection for different platforms.
+除编译器优化之外，一组预处理器定义会自动添加到构建过程中（不管编译器版本如何）。
+这些定义对应于目标CPU应该能够支持的指令集。
+例如，为任何支持SSE4.2的处理器编译的二进制文件将定义RTE_MACHINE_CPUFLAG_SSE4_2，从而为不同的平台启用编译时代码路径选择。

@@ -32,14 +32,15 @@
 
 **Part 3: Performance Optimization**
 
-性能优化指南
-==============
+Performance Optimization Guidelines
+===================================
 
-介绍
-------
+Introduction
+------------
 
-以下各节将介绍DPDK中使用的优化以及新应用程序应考虑的优化。
+The following sections describe optimizations used in the DPDK and optimizations that should be considered for a new applications.
 
-还强调了在开发使用DPDK的应用程序时应该及不应该使用的影响性能的编码技术。
+They also highlight the performance-impacting coding techniques that should,
+and should not be, used when developing an application using the DPDK.
 
-最后，介绍了使用英特尔性能分析器进行应用程序分析以优化软件。
+And finally, they give an introduction to application profiling using a Performance Analyzer from Intel to optimize the software.

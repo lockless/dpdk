@@ -28,22 +28,23 @@
     (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
     OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-配置你的应用程序
-==================
+Profile Your Application
+========================
 
-以下各节介绍了在不同体系结构上配置DPDK应用程序的方法。
+The following sections describe methods of profiling DPDK applications on
+different architectures.
 
 
-X86
------
+Profiling on x86
+----------------
 
-英特尔处理器提供性能计数器来监视事件
-英特尔提供的某些工具（如VTune）可用于对应用程序进行配置和基准测试。
-欲了解更多信息，请参阅英特尔 *VTune Performance Analyzer Essentials* 。
+Intel processors provide performance counters to monitor events.
+Some tools provided by Intel, such as VTune, can be used to profile and benchmark an application.
+See the *VTune Performance Analyzer Essentials* publication from Intel Press for more information.
 
-对于DPDK应用程序，这只能在Linux应用程序环境中完成。
+For a DPDK application, this can be done in a Linux* application environment only.
 
-应通过事件计数器监测的主要情况是：
+The main situations that should be monitored through event counters are:
 
 *   Cache misses
 
@@ -53,35 +54,46 @@ X86
 
 *   Long latency instructions and exceptions
 
-请参考 `Intel Performance Analysis Guide <http://software.intel.com/sites/products/collateral/hpc/vtune/performance_analysis_guide.pdf>`_ 获取更多的信息。
+Refer to the
+`Intel Performance Analysis Guide <http://software.intel.com/sites/products/collateral/hpc/vtune/performance_analysis_guide.pdf>`_
+for details about application profiling.
 
 
-ARM64
--------
+Profiling on ARM64
+------------------
 
-使用 Linux perf
+Using Linux perf
 ~~~~~~~~~~~~~~~~
 
-ARM64体系结构提供性能计数器来监视事件。
-Linux ``perf`` 工具可以用来分析和测试应用程序。
-除了标准事件之外，还可以使用 ``perf`` 通过原始事件（ ``-e`` ``-rXX`` ）来分析arm64特定的PMU（性能监视单元）事件。
+The ARM64 architecture provide performance counters to monitor events.  The
+Linux ``perf`` tool can be used to profile and benchmark an application.  In
+addition to the standard events, ``perf`` can be used to profile arm64
+specific PMU (Performance Monitor Unit) events through raw events (``-e``
+``-rXX``).
 
-更多详细信息请参考 `ARM64 specific PMU events enumeration <http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.100095_0002_04_en/way1382543438508.html>`_.
+For more derails refer to the
+`ARM64 specific PMU events enumeration <http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.100095_0002_04_en/way1382543438508.html>`_.
 
 
-高分辨率的cycle计数器
-~~~~~~~~~~~~~~~~~~~~~~~~
+High-resolution cycle counter
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-基于 ``rte_rdtsc()`` 的默认 ``cntvct_el0`` 提供了一种便携的方式来获取用户空间中的时钟计数器。通常它运行在<= 100MHz下。
+The default ``cntvct_el0`` based ``rte_rdtsc()`` provides a portable means to
+get a wall clock counter in user space. Typically it runs at <= 100MHz.
 
-为高分辨时钟计数器启用 ``rte_rdtsc()`` 的替代方法是通过armv8 PMU子系统。
-PMU周期计数器以CPU频率运行。但是，在arm64 linux内核中，默认情况下，不能从用户空间访问PMU周期计数器。
-通过从特权模式（内核空间）配置PMU，可以为用户空间访问启用循环计数器。
+The alternative method to enable ``rte_rdtsc()`` for a high resolution wall
+clock counter is through the armv8 PMU subsystem. The PMU cycle counter runs
+at CPU frequency. However, access to the PMU cycle counter from user space is
+not enabled by default in the arm64 linux kernel. It is possible to enable
+cycle counter for user space access by configuring the PMU from the privileged
+mode (kernel space).
 
-默认情况下，``rte_rdtsc()`` 实现使用一个可移植的 ``cntvct_el0`` 方案。
-应用程序可以使用“CONFIG_RTE_ARM_EAL_RDTSC_USE_PMU”选择基于PMU的实现。
+By default the ``rte_rdtsc()`` implementation uses a portable ``cntvct_el0``
+scheme.  Application can choose the PMU based implementation with
+``CONFIG_RTE_ARM_EAL_RDTSC_USE_PMU``.
 
-下面的示例显示了在armv8机器上配置基于PMU的循环计数器的步骤。
+The example below shows the steps to configure the PMU based cycle counter on
+an armv8 machine.
 
 .. code-block:: console
 

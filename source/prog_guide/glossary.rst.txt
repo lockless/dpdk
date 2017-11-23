@@ -28,35 +28,39 @@
     (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
     OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-术语
-======
+Glossary
+========
 
 
 ACL
-   访问控制列表
+   Access Control List
 
 API
-   应用程序编程接口
+   Application Programming Interface
 
 ASLR
-   Linux内核地址空间布局
+   Linux* kernel Address-Space Layout Randomization
+
 BSD
-   伯克利软件
+   Berkeley Software Distribution
 
 Clr
    Clear
 
 CIDR
-   无类别域间路由
+   Classless Inter-Domain Routing
 
 Control Plane
-   控制面
+   The control plane is concerned with the routing of packets and with
+   providing a start or end point.
 
 Core
-   如果处理器支持超线程，则内核可能包含多个内核或线程。
+   A core may include several lcores or threads if the processor supports
+   hyperthreading.
 
 Core Components
-   DPDK提供的一组库，包括 eal, ring, mempool, mbuf, timers等扥。
+   A set of libraries provided by the DPDK, including eal, ring, mempool,
+   mbuf, timers, and so on.
 
 CPU
    Central Processing Unit
@@ -65,16 +69,18 @@ CRC
    Cyclic Redundancy Check
 
 ctrlmbuf
-   携带控制数据的 *mbuf* 。
+   An *mbuf* carrying control data.
 
 Data Plane
-   数据面，在网络架构层中对应于控制面，负责转发报文。这层必须具有很高的性能。
+   In contrast to the control plane, the data plane in a network architecture
+   are the layers involved when forwarding packets.  These layers must be
+   highly optimized to achieve good performance.
 
 DIMM
    Dual In-line Memory Module
 
 Doxygen
-   DPDK中用于生成API参考的文档生成器。
+   A documentation generator used in the DPDK to generate the API reference.
 
 DPDK
    Data Plane Development Kit
@@ -253,7 +259,7 @@ Tx
    Transmission
 
 TUN/TAP
-   TUN 和 TAP 是虚拟的网络内核设备。
+   TUN and TAP are virtual network kernel devices.
 
 VLAN
    Virtual Local Area Network
@@ -262,7 +268,7 @@ Wr
    Write
 
 WRED
-   加权随机早丢弃
+   Weighted Random Early Detection
 
 WRR
-   加权轮询
+   Weighted Round Robin

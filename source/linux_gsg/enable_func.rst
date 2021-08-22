@@ -49,7 +49,7 @@ BIOS 支持
 
    grep hpet /proc/timer_list
 
-如果没有条目，则必须在BIOS中启用HPET，镔铁重新启动系统。
+如果没有条目，则必须在BIOS中启用HPET，并且重新启动系统。
 
 Linux 内核支持
 ~~~~~~~~~~~~~~
